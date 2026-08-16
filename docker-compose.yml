@@ -1,0 +1,123 @@
+# ELYS — deployment topology.
+#
+# Traefik terminates TLS and is the only container with a published port.
+# `web` serves the built SPA at the domain root; `api` is routed under /api on
+# the same host, so the browser never makes a cross-origin request and no CORS
+# preflight sits in front of a streaming response.
+#
+# Coolify can consume this file directly: it manages the Traefik instance and
+# the certificate resolver, so on a Coolify host you can drop the `traefik`
+# service and keep only the labels.
+
+services:
+  traefik:
+    image: traefik:v3.2
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --certificatesresolvers.le.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.le.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.le.acme.httpchallenge.entrypoint=web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      # Read-only: Traefik needs to watch container labels, nothing more.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_letsencrypt:/letsencrypt
+    networks: [edge]
+
+  web:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    depends_on: [api]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.elys-web.rule=Host(`${ELYS_HOST}`)
+      - traefik.http.routers.elys-web.entrypoints=websecure
+      - traefik.http.routers.elys-web.tls.certresolver=le
+      - traefik.http.services.elys-web.loadbalancer.server.port=80
+    networks: [edge]
+
+  api:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    environment:
+      APP_ENV: prod
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      QDRANT_URL: http://qdrant:6333
+      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-gemma3:12b}
+      # Same-origin in production; the list matters only for a split deployment.
+      CORS_ORIGINS: https://${ELYS_HOST}
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.elys-api.rule=Host(`${ELYS_HOST}`) && PathPrefix(`/api`)
+      - traefik.http.routers.elys-api.entrypoints=websecure
+      - traefik.http.routers.elys-api.tls.certresolver=le
+      - traefik.http.services.elys-api.loadbalancer.server.port=8000
+      # Generation streams token by token; buffering it would defeat the point.
+      - traefik.http.middlewares.elys-sse.buffering.maxResponseBodyBytes=0
+      - traefik.http.routers.elys-api.middlewares=elys-sse
+    networks: [edge, internal]
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [internal]
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks: [internal]
+
+  # On-premise model host. Off by default; start with:
+  #   docker compose --profile onprem up -d
+  # then set LLM_PROVIDER=ollama.
+  ollama:
+    image: ollama/ollama:latest
+    profiles: [onprem]
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama
+    networks: [internal]
+
+networks:
+  # Only `edge` is reachable from Traefik; the datastores are not on it.
+  edge:
+  internal:
+    internal: true
+
+volumes:
+  traefik_letsencrypt:
+  postgres_data:
+  qdrant_data:
+  ollama_models:

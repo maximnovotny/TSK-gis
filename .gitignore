@@ -1,13 +1,26 @@
+# --- node ---
 node_modules/
-.next/
-out/
-build/
+dist/
 *.tsbuildinfo
-next-env.d.ts
 
+# --- python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# --- local data ---
+*.db
+*.sqlite3
+
+# --- secrets and env ---
 .env
 .env*.local
+!.env.example
 
+# --- editors / os ---
 .DS_Store
 *.log
-npm-debug.log*

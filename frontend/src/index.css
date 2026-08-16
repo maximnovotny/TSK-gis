@@ -1,0 +1,63 @@
+@import "tailwindcss";
+@import "@heroui/react/styles";
+
+/* HeroUI ships prebuilt class names Tailwind's scanner would otherwise miss. */
+@source "../node_modules/@heroui/react";
+
+/**
+ * Silver-slate: a monochrome working surface.
+ *
+ * Colour is a signal here, not decoration. Everything structural is neutral, so
+ * the only saturated pixels on screen are state the engineer must notice —
+ * a failed run, an unreachable model, syntax highlighting in the editor.
+ */
+@theme {
+  --color-slate-950: #0b0d10;
+  --color-slate-900: #12151a;
+  --color-slate-850: #171b21;
+  --color-slate-800: #1d222a;
+  --color-slate-700: #2a3038;
+  --color-slate-600: #3b424c;
+  --color-slate-400: #7c8593;
+  --color-slate-300: #a4acb8;
+  --color-slate-200: #c8ced7;
+  --color-slate-100: #e6e9ee;
+
+  --color-signal-error: #d97066;
+  --color-signal-ok: #6f9c7f;
+  --color-signal-busy: #8d9bb0;
+
+  --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", ui-monospace,
+    monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-slate-950);
+  color: var(--color-slate-200);
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbars in the same register as the rest of the surface. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-slate-700) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-slate-700);
+  border-radius: 6px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
