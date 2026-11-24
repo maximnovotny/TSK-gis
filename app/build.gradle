@@ -1,0 +1,40 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'cz.gsprep'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'cz.gsprep.fotoprep'
+        minSdk 29          // Android 10+
+        targetSdk 35
+        versionCode 1
+        versionName '1.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            // Podepíše se ladicím klíčem, aby šlo APK rovnou nainstalovat (sideload).
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    androidResources {
+        noCompress 'gsm'
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+}
+
+// Žádné závislosti – jen Android SDK (GLES 3.1 compute shadery, ImageDecoder, MediaStore).
