@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@color/bg_panel_solid"
+    android:paddingHorizontal="20dp"
+    android:paddingTop="18dp"
+    android:paddingBottom="28dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="@string/settings_title" android:textColor="@color/on_bg"
+            android:textSize="19sp" android:textStyle="bold" />
+
+        <androidx.appcompat.widget.SwitchCompat android:id="@+id/swUseAr"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="14dp" android:text="@string/set_use_ar"
+            android:textColor="@color/on_bg" />
+
+        <androidx.appcompat.widget.SwitchCompat android:id="@+id/swShowAr"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="@string/set_show_ar" android:textColor="@color/on_bg" />
+
+        <androidx.appcompat.widget.SwitchCompat android:id="@+id/swTags"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="@string/set_tags" android:textColor="@color/on_bg" />
+
+        <androidx.appcompat.widget.SwitchCompat android:id="@+id/swQuality"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="@string/set_quality" android:textColor="@color/on_bg" />
+
+        <androidx.appcompat.widget.SwitchCompat android:id="@+id/swAntiBlur"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="@string/set_antiblur" android:textColor="@color/on_bg" />
+
+        <androidx.appcompat.widget.SwitchCompat android:id="@+id/swAdaptRes"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="@string/set_adapt_resolution" android:textColor="@color/on_bg" />
+
+        <androidx.appcompat.widget.SwitchCompat android:id="@+id/swExifZero"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="@string/set_exif_zero" android:textColor="@color/on_bg" />
+
+        <androidx.appcompat.widget.SwitchCompat android:id="@+id/swLockAe"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="@string/set_lock_ae" android:textColor="@color/on_bg" />
+
+        <androidx.appcompat.widget.SwitchCompat android:id="@+id/swLockAf"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="@string/set_lock_af" android:textColor="@color/on_bg" />
+
+        <TextView android:id="@+id/lblJpeg" style="@style/Hud.Label"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginTop="16dp" android:text="@string/set_jpeg_quality" />
+        <SeekBar android:id="@+id/seekJpeg"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:max="20" />
+
+        <TextView android:id="@+id/lblDistance" style="@style/Hud.Label"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginTop="10dp" android:text="@string/set_coverage_target" />
+        <SeekBar android:id="@+id/seekDistance"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:max="49" />
+
+        <TextView android:id="@+id/lblSharp" style="@style/Hud.Label"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:layout_marginTop="10dp" android:text="@string/hud_sharpness" />
+        <SeekBar android:id="@+id/seekSharp"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:max="40" />
+
+        <TextView android:id="@+id/txtDeviceInfo"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="16dp" android:textColor="@color/on_bg_dim"
+            android:textSize="11sp" android:fontFamily="monospace" />
+
+        <Button android:id="@+id/btnCloseSettings"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="14dp" android:text="@string/close" />
+    </LinearLayout>
+</ScrollView>

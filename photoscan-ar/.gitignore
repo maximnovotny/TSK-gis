@@ -1,0 +1,11 @@
+local.properties
+keystore.properties
+# the signing key and its password stay out of git; they ship in the source ZIP
+*.jks
+keystore.properties
+.gradle/
+build/
+.idea/
+*.iml
+.DS_Store
+.cxx/

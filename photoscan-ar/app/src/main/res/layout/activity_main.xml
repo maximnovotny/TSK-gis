@@ -1,0 +1,282 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/bg">
+
+    <android.opengl.GLSurfaceView
+        android:id="@+id/glView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <cz.photoscanar.ui.TagOverlayView
+        android:id="@+id/tagOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- top status strip -->
+    <LinearLayout
+        android:id="@+id/topBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:layout_marginStart="10dp"
+        android:layout_marginTop="42dp"
+        android:layout_marginEnd="10dp"
+        android:background="@drawable/bg_panel"
+        android:baselineAligned="false"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="8dp">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+            <TextView style="@style/Hud.Label" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:text="@string/hud_photos" />
+            <TextView android:id="@+id/txtPhotos" style="@style/Hud.Value"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                tools:text="128" android:text="0" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+            <TextView style="@style/Hud.Label" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:text="@string/hud_rate" />
+            <TextView android:id="@+id/txtRate" style="@style/Hud.Value"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                tools:text="1.9/2.0" android:text="0.0" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1.2"
+            android:orientation="vertical">
+            <TextView style="@style/Hud.Label" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:text="@string/hud_ar" />
+            <TextView android:id="@+id/txtAr" style="@style/Hud.Value"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textSize="12sp" tools:text="AR sleduje" android:text="@string/ar_off" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+            <TextView style="@style/Hud.Label" android:layout_width="wrap_content"
+                android:layout_height="wrap_content" android:text="@string/storage_free" />
+            <TextView android:id="@+id/txtStorage" style="@style/Hud.Value"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textSize="12sp" tools:text="21 GB" android:text="-" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- left indicator column -->
+    <LinearLayout
+        android:id="@+id/leftColumn"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="start|top"
+        android:layout_marginStart="10dp"
+        android:layout_marginTop="124dp"
+        android:background="@drawable/bg_panel"
+        android:orientation="vertical"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="8dp">
+
+        <TextView style="@style/Hud.Label" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:text="@string/hud_sharpness" />
+        <TextView android:id="@+id/txtSharpness" style="@style/Hud.Value"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            tools:text="0.82" android:text="-" />
+
+        <TextView style="@style/Hud.Label" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:layout_marginTop="8dp"
+            android:text="@string/hud_overlap" />
+        <TextView android:id="@+id/txtOverlap" style="@style/Hud.Value"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            tools:text="83 %" android:text="-" />
+
+        <TextView style="@style/Hud.Label" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:layout_marginTop="8dp"
+            android:text="@string/hud_coverage" />
+        <TextView android:id="@+id/txtCoverage" style="@style/Hud.Value"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            tools:text="64 %" android:text="-" />
+
+        <TextView style="@style/Hud.Label" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:layout_marginTop="8dp"
+            android:text="@string/hud_tags" />
+        <TextView android:id="@+id/txtTags" style="@style/Hud.Value"
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            tools:text="3" android:text="-" />
+    </LinearLayout>
+
+    <!-- resolution / queue line -->
+    <TextView
+        android:id="@+id/txtTech"
+        style="@style/Hud.Label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end|top"
+        android:layout_marginTop="124dp"
+        android:layout_marginEnd="12dp"
+        android:background="@drawable/bg_pill"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="6dp"
+        tools:text="4080x3072 - q 0/16" />
+
+    <!-- transient warning -->
+    <TextView
+        android:id="@+id/txtWarning"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal|top"
+        android:layout_marginTop="200dp"
+        android:background="@drawable/bg_pill"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="10dp"
+        android:textColor="@color/warn"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:visibility="gone"
+        tools:text="Zpomalte pohyb"
+        tools:visibility="visible" />
+
+    <cz.photoscanar.ui.MiniMapView
+        android:id="@+id/miniMap"
+        android:layout_width="124dp"
+        android:layout_height="124dp"
+        android:layout_gravity="start|bottom"
+        android:layout_marginStart="10dp"
+        android:layout_marginBottom="196dp" />
+
+    <TextView
+        android:id="@+id/txtAdvice"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal|bottom"
+        android:layout_marginBottom="200dp"
+        android:background="@drawable/bg_pill"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="8dp"
+        android:textColor="@color/on_bg"
+        android:textSize="15sp"
+        android:visibility="gone"
+        tools:text="Pokračujte vpravo"
+        tools:visibility="visible" />
+
+    <!-- bottom control block, reachable with one thumb -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="#CC080A0D"
+        android:orientation="vertical"
+        android:paddingTop="10dp"
+        android:paddingBottom="28dp">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:orientation="horizontal">
+
+            <TextView android:id="@+id/chipAuto"
+                android:layout_width="wrap_content" android:layout_height="36dp"
+                android:background="@drawable/bg_chip" android:gravity="center"
+                android:paddingHorizontal="14dp" android:text="@string/mode_auto"
+                android:textColor="@color/chip_text_color" android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView android:id="@+id/chipSmart"
+                android:layout_width="wrap_content" android:layout_height="36dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_chip" android:gravity="center"
+                android:paddingHorizontal="16dp" android:text="@string/mode_smart"
+                android:textColor="@color/chip_text_color" android:textSize="13sp"
+                android:textStyle="bold" />
+
+            <TextView android:id="@+id/chipDetail"
+                android:layout_width="wrap_content" android:layout_height="36dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_chip" android:gravity="center"
+                android:paddingHorizontal="16dp" android:text="@string/mode_detail"
+                android:textColor="@color/chip_text_color" android:textSize="13sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:baselineAligned="false"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:orientation="horizontal">
+                <ImageButton android:id="@+id/btnSettings"
+                    android:layout_width="52dp" android:layout_height="52dp"
+                    android:background="@drawable/bg_pill"
+                    android:contentDescription="@string/btn_settings"
+                    android:src="@drawable/ic_settings" />
+                <ImageButton android:id="@+id/btnTags"
+                    android:layout_width="52dp" android:layout_height="52dp"
+                    android:layout_marginStart="10dp"
+                    android:background="@drawable/bg_pill"
+                    android:contentDescription="@string/tags_title"
+                    android:src="@drawable/ic_tag" />
+            </LinearLayout>
+
+            <ImageButton
+                android:id="@+id/btnCapture"
+                android:layout_width="88dp"
+                android:layout_height="88dp"
+                android:background="@drawable/btn_capture_idle"
+                android:contentDescription="@string/start"
+                android:scaleType="center" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:orientation="horizontal">
+                <ImageButton android:id="@+id/btnToggleAr"
+                    android:layout_width="52dp" android:layout_height="52dp"
+                    android:background="@drawable/bg_pill"
+                    android:contentDescription="@string/btn_hide_ar"
+                    android:src="@drawable/ic_eye" />
+                <ImageButton android:id="@+id/btnProjects"
+                    android:layout_width="52dp" android:layout_height="52dp"
+                    android:layout_marginStart="10dp"
+                    android:background="@drawable/bg_pill"
+                    android:contentDescription="@string/btn_projects"
+                    android:src="@drawable/ic_folder" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/txtStatusLine"
+            style="@style/Hud.Label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            tools:text="AUTO 2 FPS - projekt 001 - 00:42" />
+    </LinearLayout>
+</FrameLayout>

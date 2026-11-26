@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#FF0B0D10</color>
+    <color name="bg_panel">#CC13171C</color>
+    <color name="bg_panel_solid">#FF13171C</color>
+    <color name="on_bg">#FFECEFF3</color>
+    <color name="on_bg_dim">#FF9AA3AE</color>
+    <color name="accent">#FF35D07F</color>
+    <color name="accent_dark">#FF15351F</color>
+    <color name="rec_red">#FFE5484D</color>
+    <color name="warn">#FFF5C04A</color>
+    <color name="ok_green">#FF35D07F</color>
+    <color name="bad_red">#FFE5484D</color>
+    <color name="divider">#33FFFFFF</color>
+    <color name="transparent">#00000000</color>
+</resources>

@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PhotoScan AR</string>
+    <string name="projects_title">Projekty</string>
+
+    <string name="start">START</string>
+    <string name="stop">STOP</string>
+    <string name="mode_auto">AUTO 2 FPS</string>
+    <string name="mode_smart">SMART</string>
+    <string name="mode_detail">DETAIL</string>
+
+    <string name="hud_photos">Snímky</string>
+    <string name="hud_rate">Rychlost</string>
+    <string name="hud_sharpness">Ostrost</string>
+    <string name="hud_overlap">Překryv</string>
+    <string name="hud_ar">AR</string>
+    <string name="hud_coverage">Pokrytí</string>
+    <string name="hud_tags">Terče</string>
+
+    <string name="ar_off">AR vypnuto</string>
+    <string name="ar_unavailable">AR nedostupné</string>
+    <string name="ar_tracking">AR sleduje</string>
+    <string name="ar_paused">AR pozastaveno</string>
+    <string name="ar_init">AR inicializace</string>
+    <string name="ar_lost">AR tracking ztracen</string>
+    <string name="ar_excessive_motion">Zpomalte pohyb</string>
+    <string name="ar_insufficient_light">Málo světla pro AR</string>
+    <string name="ar_insufficient_features">Málo textury pro AR</string>
+    <string name="ar_fallback">AR selhalo – pokračuji bez AR</string>
+
+    <string name="warn_too_fast">Příliš rychlý pohyb – riziko rozmazání</string>
+    <string name="warn_blurry">Neostrý snímek</string>
+    <string name="warn_dark">Příliš tmavé</string>
+    <string name="warn_bright">Přeexponované</string>
+    <string name="warn_duplicate">Téměř stejný záběr</string>
+    <string name="warn_low_overlap">Nízký překryv – fotografujte hustěji</string>
+    <string name="warn_storage">Málo místa v úložišti</string>
+    <string name="warn_thermal">Telefon se přehřívá – snižuji rychlost</string>
+    <string name="warn_queue">Ukládání nestíhá – snižuji rychlost</string>
+
+    <string name="perm_camera_title">Potřebuji přístup k fotoaparátu</string>
+    <string name="perm_camera_msg">Aplikace bez fotoaparátu nemůže pořizovat snímky. Povolte prosím přístup v nastavení.</string>
+    <string name="perm_grant">Povolit</string>
+    <string name="cancel">Zrušit</string>
+    <string name="ok">OK</string>
+    <string name="close">Zavřít</string>
+
+    <string name="settings_title">Nastavení snímání</string>
+    <string name="set_show_ar">Zobrazovat AR vrstvu</string>
+    <string name="set_use_ar">Používat ARCore (sledování pozic)</string>
+    <string name="set_tags">Detekovat AprilTag 36h11</string>
+    <string name="set_quality">Analyzovat kvalitu snímků</string>
+    <string name="set_antiblur">Omezit expoziční čas (anti-blur)</string>
+    <string name="set_adapt_resolution">Při přetížení snižovat rozlišení (jinak rychlost)</string>
+    <string name="set_exif_zero">EXIF orientace vždy 0 (konzistentní pro COLMAP)</string>
+    <string name="set_jpeg_quality">Kvalita JPEG</string>
+    <string name="set_target_rate">Cílová rychlost</string>
+    <string name="set_lock_ae">Uzamknout expozici (AE)</string>
+    <string name="set_lock_af">Uzamknout ostření (AF)</string>
+    <string name="set_coverage_target">Cíl pokrytí – vzdálenost objektu</string>
+
+    <string name="tags_title">Terče AprilTag</string>
+    <string name="tags_add_distance">Přidat známou vzdálenost</string>
+    <string name="tags_from">Od ID</string>
+    <string name="tags_to">Do ID</string>
+    <string name="tags_distance_m">Vzdálenost (m)</string>
+    <string name="tags_none">Žádné terče nedetekovány</string>
+
+    <string name="projects_empty">Žádné projekty</string>
+    <string name="project_export_zip">Export ZIP</string>
+    <string name="project_copy_folder">Kopírovat do složky…</string>
+    <string name="project_delete">Smazat</string>
+    <string name="project_share">Odeslat</string>
+    <string name="project_open">Detail</string>
+    <string name="exporting">Exportuji…</string>
+    <string name="export_done">Hotovo: %1$s</string>
+    <string name="export_failed">Export selhal: %1$s</string>
+    <string name="copy_done">Zkopírováno %1$d souborů</string>
+    <string name="delete_confirm">Smazat projekt %1$s včetně všech fotografií?</string>
+
+    <string name="history_title">Historie snímání</string>
+    <string name="coverage_verified">Geometricky ověřené pokrytí</string>
+    <string name="coverage_estimated">Orientační odhad z trajektorie</string>
+    <string name="coverage_disclaimer">Pokrytí je orientační. Zelená neznamená ověřenou fotogrammetrickou rekonstrukci.</string>
+
+    <string name="session_summary">Projekt %1$s: %2$d snímků, %3$d s, průměr %4$s FPS</string>
+    <string name="storage_free">Volno %1$s</string>
+    <string name="btn_settings">Nastavení</string>
+    <string name="btn_projects">Projekty</string>
+    <string name="btn_hide_ar">Skrýt AR</string>
+    <string name="btn_show_ar">Zobrazit AR</string>
+    <string name="advice_move_to">Pokračujte směrem %1$s</string>
+    <string name="advice_ok">Pokrytí v pořádku</string>
+    <string name="dir_left">vlevo</string>
+    <string name="dir_right">vpravo</string>
+    <string name="dir_up">nahoru</string>
+    <string name="dir_down">dolů</string>
+    <string name="dir_back">zpět</string>
+    <string name="dir_forward">vpřed</string>
+</resources>

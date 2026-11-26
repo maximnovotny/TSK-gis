@@ -1,0 +1,110 @@
+[
+ {
+  "file": "single_0_240.png",
+  "ids": [
+   0
+  ]
+ },
+ {
+  "file": "single_5_160.png",
+  "ids": [
+   5
+  ]
+ },
+ {
+  "file": "single_42_320.png",
+  "ids": [
+   42
+  ]
+ },
+ {
+  "file": "single_100_200.png",
+  "ids": [
+   100
+  ]
+ },
+ {
+  "file": "single_586_120.png",
+  "ids": [
+   586
+  ]
+ },
+ {
+  "file": "single_233_400.png",
+  "ids": [
+   233
+  ]
+ },
+ {
+  "file": "rot_7_90.png",
+  "ids": [
+   7
+  ]
+ },
+ {
+  "file": "rot_7_180.png",
+  "ids": [
+   7
+  ]
+ },
+ {
+  "file": "rot_7_270.png",
+  "ids": [
+   7
+  ]
+ },
+ {
+  "file": "rot_311_90.png",
+  "ids": [
+   311
+  ]
+ },
+ {
+  "file": "persp_17.png",
+  "ids": [
+   17
+  ]
+ },
+ {
+  "file": "persp_250.png",
+  "ids": [
+   250
+  ]
+ },
+ {
+  "file": "persp_99.png",
+  "ids": [
+   99
+  ]
+ },
+ {
+  "file": "multi_3.png",
+  "ids": [
+   3,
+   64,
+   128
+  ]
+ },
+ {
+  "file": "multi_3_noisy.png",
+  "ids": [
+   3,
+   64,
+   128
+  ]
+ },
+ {
+  "file": "gradient_60.png",
+  "ids": [
+   60
+  ]
+ },
+ {
+  "file": "negative_checker.png",
+  "ids": []
+ },
+ {
+  "file": "negative_shapes.png",
+  "ids": []
+ }
+]
