@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:keepScreenOn="true">
+
+    <android.opengl.GLSurfaceView
+        android:id="@+id/surfaceview"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <TextView
+        android:id="@+id/status"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_margin="12dp"
+        android:background="@color/panel"
+        android:padding="10dp"
+        android:fontFamily="monospace"
+        android:textColor="#FFFFFFFF"
+        android:textSize="12sp"
+        android:text="..." />
+
+    <CheckBox
+        android:id="@+id/autofocus"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_margin="12dp"
+        android:background="@color/panel"
+        android:padding="8dp"
+        android:textColor="#FFFFFFFF"
+        android:textSize="12sp"
+        android:text="Autofocus" />
+
+    <Button
+        android:id="@+id/rec"
+        android:layout_width="96dp"
+        android:layout_height="96dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="28dp"
+        android:background="@drawable/rec_button"
+        android:textColor="#FFFFFFFF"
+        android:textStyle="bold"
+        android:textSize="13sp"
+        android:text="REC" />
+</FrameLayout>

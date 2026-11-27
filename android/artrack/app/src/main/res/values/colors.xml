@@ -1,0 +1,6 @@
+<resources>
+    <color name="ic_launcher_background">#101418</color>
+    <color name="panel">#A6000000</color>
+    <color name="rec_idle">#FFD32F2F</color>
+    <color name="rec_active">#FF2E7D32</color>
+</resources>
