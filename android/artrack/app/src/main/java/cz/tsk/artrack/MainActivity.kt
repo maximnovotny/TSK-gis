@@ -307,12 +307,16 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
         lastMessage = "Ukládám…"
         Thread {
             capturer?.shutdown()
-            rec.finish(buildMeta(rec, capturer, reason))
+            val rsReport = runCatching {
+                RealityScanPackage.write(rec.dir, rec.photoRows, rec.fixRows)
+            }.onFailure { Log.w(TAG, "RealityScan package failed", it) }.getOrNull()
+            rec.finish(buildMeta(rec, capturer, reason, rsReport))
             val result = Exporter.export(this, rec.dir, rec.dir.name)
             uiHandler.post {
                 lastMessage = if (result.error == null) {
                     "Hotovo: ${result.relativePath}\n${rec.stillCount} fotek, " +
-                        "${result.files} souborů, ${result.bytes / (1024 * 1024)} MB"
+                        "${result.files} souborů, ${result.bytes / (1024 * 1024)} MB" +
+                        (rsReport?.let { "\n" + it.summary() } ?: "")
                 } else {
                     "Export selhal (${result.error}); soubory zůstaly v " +
                         "Android/data/$packageName/files/ARTrack/${rec.dir.name}"
@@ -325,7 +329,8 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
     private fun buildMeta(
         rec: SessionRecorder,
         capturer: StillCapturer?,
-        stopReason: String
+        stopReason: String,
+        rsReport: RealityScanPackage.Report?
     ): JSONObject {
         val cameraConfig = synchronized(sessionLock) { session?.cameraConfig }
         val iso = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", Locale.US)
@@ -340,6 +345,7 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
         json.put("frames_tracked", rec.frameCount)
         json.put("photos", rec.stillCount)
         json.put("photos_dropped", capturer?.dropped ?: 0)
+        json.put("photos_without_exif", capturer?.exifErrors ?: 0)
         json.put("photo_interval_ms", stillIntervalMs)
         json.put("gps_fixes", rec.gpsCount)
         json.put("video_file", if (rec.dir.resolve("video.mp4").exists()) "video.mp4" else null)
@@ -375,6 +381,30 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
             cc.put("fps_range", cameraConfig.fpsRange.toString())
             cc.put("facing", cameraConfig.facingDirection.name)
             json.put("camera_config", cc)
+        }
+
+        if (rsReport != null) {
+            val rs = JSONObject()
+            rs.put("images", rsReport.images)
+            rs.put("crs", rsReport.crs)
+            rs.put("epsg", rsReport.epsg ?: JSONObject.NULL)
+            rs.put("georeferenced", !rsReport.local)
+            rs.put("fit_fixes", rsReport.fitFixes)
+            rsReport.fit?.let { fit ->
+                rs.put("heading_deg_from_east", fit.headingDeg)
+                rs.put("fit_rms_m", fit.rms)
+                rs.put("track_extent_m", fit.extent)
+                fit.sigmaDeg?.let { rs.put("heading_sigma_deg", it) }
+            }
+            rs.put("altitude_offset_m", rsReport.altOffset)
+            rs.put(
+                "note",
+                "Camera position priors for RealityScan are in realityscan/; the " +
+                    "photos carry their WGS84 position in EXIF. Only a rotation about " +
+                    "the vertical axis and a translation are fitted from GPS - the " +
+                    "scale stays at 1, because ARCore's metric scale beats GPS."
+            )
+            json.put("realityscan", rs)
         }
 
         json.put(
@@ -518,7 +548,19 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
         try {
             frame.acquireCameraImage().use { image ->
                 val nv21 = YuvUtil.toNv21(image)
-                val name = capturer.offer(stillIndex, nv21, image.width, image.height)
+                val intrinsics = frame.camera.imageIntrinsics
+                val focal35 = if (intrinsics.imageDimensions[0] > 0) {
+                    intrinsics.focalLength[0].toDouble() /
+                        intrinsics.imageDimensions[0].toDouble() * 36.0
+                } else 0.0
+                val tags = StillCapturer.Tags(
+                    fix = fix,
+                    focal35mm = focal35,
+                    width = image.width,
+                    height = image.height,
+                    wallClockMs = System.currentTimeMillis()
+                )
+                val name = capturer.offer(stillIndex, nv21, image.width, image.height, tags)
                 if (name != null) {
                     rec.writeStill(name, frameIndex, frame, fix)
                     stillIndex++

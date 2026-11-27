@@ -7,7 +7,8 @@ Jednoduchá Android aplikace: jedno tlačítko, které naráz nahrává
 * **pose.csv** — pózu kamery pro **každý trackovaný snímek** (celá trajektorie, AR/VIO),
 * **gps.csv + track.gpx** — všechny GPS fixy během záznamu,
 * **video.mp4** — volitelně záznam ARCore session (viz upozornění níže),
-* **meta.json** — zařízení, kalibrace kamery, počty, časové báze.
+* **realityscan/** — `trajectory.csv` s pozicemi kamer v UTM + návod k importu,
+* **meta.json** — zařízení, kalibrace kamery, počty, časové báze, report fitu.
 
 Smysl: fotogrammetrický SW nemusí hledat pozice kamer naslepo — pro každý snímek
 dostane externí orientaci (z AR trackingu, v metrech a se správným měřítkem)
@@ -15,7 +16,7 @@ a polohu v WGS84 (z GPS).
 
 ## Instalace
 
-APK: [`apk/artrack-debug.apk`](apk/artrack-debug.apk) — podepsané debug klíčem,
+APK: [`apk/artrack-debug.apk`](apk/artrack-debug.apk) (v1.1) — podepsané debug klíčem,
 takže v telefonu stačí povolit instalaci z neznámých zdrojů.
 
 Požadavky:
@@ -92,75 +93,94 @@ fixu (±1 snímek), takže GPS a snímky jdou spárovat bez řešení hodinovýc
 Složka záznamu dostane i vlastní `README.txt` s popisem sloupců — data jsou
 samovysvětlující i po roce.
 
-## Export do COLMAPu
+## Import do RealityScan (Epic Games)
 
-```bash
-python3 tools/artrack_export.py /cesta/k/Download/ARTrack/20261127_143512
-python3 tools/artrack_export.py ... --step 2        # jen každá druhá fotka
-python3 tools/artrack_export.py ... --from-video --step 10   # řezání z videa
+Od verze 1.1 je **výstup z telefonu rovnou importovatelný balíček** — nic se na
+PC nedopočítává:
+
+```
+Download/ARTrack/20261127_143512/
+├── frames/              fotky v plném rozlišení, GPS zapsané přímo v EXIFu
+├── realityscan/
+│   ├── trajectory.csv          pozice kamer name,x,y,z v UTM (podle GPS)
+│   ├── trajectory_space.txt    totéž oddělené mezerami (fallback importu)
+│   ├── trajectory_local.csv    pozice v lokálních metrech, bez georeferencování
+│   └── jak-importovat.txt      postup + report fitu AR → mapa
+├── frames.csv, pose.csv, gps.csv, track.gpx, meta.json, README.txt
+└── video.mp4            (volitelně)
 ```
 
-Vznikne `export/`:
+Postup (cesta A, doporučená):
 
-* `colmap/cameras.txt`, `colmap/images.txt`, `colmap/points3D.txt` — pózy
-  převedené do konvence COLMAP (world-to-camera, +Z dopředu, +Y dolů), hotové
-  k importu jako známé pozice kamer,
-* `frames_geo.csv` — ke každému snímku WGS84 `lat/lon/alt` (chybějící
-  interpoluje z `gps.csv`) a lokální AR souřadnice; použitelné jako camera
-  priors v RealityCapture / Metashape.
+1. Nastav souřadnicový systém projektu na EPSG, který je v `jak-importovat.txt`
+   (např. `32633` = UTM 33N) — **před** importem trajektorie.
+2. Načti fotky z `frames/`.
+3. *WORKFLOW → Import Metadata → **Trajectory*** (ve starších verzích *Flight log*),
+   vyber `realityscan/trajectory.csv`, popis sloupců `name x y z`.
+4. V nastavení alignmentu **zapni camera priors (position prior)**.
+5. Align Images.
 
-Skript jede na čistém Pythonu 3; `ffmpeg` potřebuje jen režim `--from-video`.
+Past: když popis sloupců nesedí souboru, import neohlásí chybu, jen sloupce
+zahodí — po importu zkontroluj u pár kamer, že mají prior pozici.
+
+Cesta B je ještě jednodušší: fotky mají GPS v EXIFu, takže se dají načíst samy
+a RealityScan si polohy vezme odtud. Měřítko pak ale drží jen GPS (metry), ne AR
+trasa (centimetry). Obě cesty jdou kombinovat.
+
+Rotace se neimportují: přesnou konvenci omega/phi/kappa v RealityScanu jsem
+neměl z čeho ověřit a špatná rotace je horší než žádná. Orientace si alignment
+spočítá sám.
+
+### Co je v EXIFu
+
+GPS (lat/lon/alt, WGS84), čas pořízení, výrobce a model telefonu, ohnisko
+v ekvivalentu 35 mm a orientace = 1 (fotka se nikde nemá otáčet). Píše se při
+ukládání snímku; `meta.json` hlásí `photos_without_exif`, kdyby zápis selhal.
+
+### Jak se dělá transformace AR → mapa
+
+AR trajektorie je v metrech, ale azimut má libovolný (ARCore nemá kompas).
+Z GPS fixů se proto odhadne **jen otočení kolem svislé osy a posun, měřítko
+zůstává 1** — AR měřítko je o dva řády lepší než GPS. Do `jak-importovat.txt`
+a `meta.json` se zapíše RMS fitu a **nejistota azimutu** (≈ RMS / délka trasy):
+
+* obchůzka ~4 m → azimut ±40°, ale pozice kamer do ~1 m,
+* trasa ~40 m → azimut ±4°.
+
+Když jsou GPS fixy nepoužitelné (méně než dva s přesností ≤ 20 m), balíček se
+zapíše jen v lokálních metrech a napíše to. Potřebuješ-li model správně otočený
+k severu z krátké trasy, použij `trajectory_local.csv` a otoč to v GISu, nebo
+zadej azimut ručně v Python exportu (`--heading`).
+
+Ověřeno: převod WGS84 → UTM souhlasí s `pyproj` do 0,5 mm (6 míst, obě
+polokoule), fit na bezšumových datech vrátí zadaný azimut (RMS 0,00 m) a při
+2 m šumu GPS a 60 m trase drží pozice do ~1,2 m od pravdy.
+
+## Co navíc umí Python export
+
+`tools/artrack_export.py` dělá to, co se do telefonu nehodí:
+
+```bash
+python3 tools/artrack_export.py <session>              # COLMAP + RealityScan + geo CSV
+python3 tools/artrack_export.py <session> --heading 137 # azimut ručně
+python3 tools/artrack_export.py <session> --epsg 32633  # konkrétní EPSG
+python3 tools/artrack_export.py <session> --xmp         # XMP sidecary s rotacemi
+python3 tools/artrack_export.py <session> --from-video --step 10
+```
+
+* `colmap/cameras.txt`, `images.txt`, `points3D.txt` — pózy v konvenci COLMAP,
+* `frames_geo.csv` — WGS84 + lokální AR souřadnice ke každé fotce,
+* `xmp/*.xmp` — **experimentální** XMP sidecary s plnou pózou; konvenci matice
+  `xcr:Rotation` jsem neověřil, takže to zkus na 10 fotkách a při zrcadleném
+  výsledku přidej `--xmp-transpose`,
+* řezání snímků z videa, když chceš jít přes `video.mp4`.
+
 Ruční řezání videa se stejným mapováním indexů:
 
 ```bash
 ffmpeg -i video.mp4 -vf "select='not(mod(n\,10))'" -vsync 0 -q:v 2 frame_%06d.jpg
 # n-tý vyříznutý obrázek odpovídá řádku pose.csv s frame_index = n*10
 ```
-
-## Import do RealityScan (Epic Games)
-
-Export vedle COLMAPu vyrobí i `export/realityscan/`:
-
-| soubor | k čemu |
-|---|---|
-| `trajectory.csv` | pozice kamer `name,x,y,z` v projektovaném CRS (default UTM zóna podle GPS) |
-| `trajectory_space.txt` | totéž oddělené mezerami, kdyby import nebral čárky |
-| `exif_gps.args` | argfile pro `exiftool` — zapíše GPS do EXIFu samotných fotek |
-| `xmp/*.xmp` | (jen s `--xmp`) XMP sidecary s plnou pózou — **experimentální** |
-| `jak-importovat.txt` | postup krok za krokem včetně reportu fitu |
-
-Přepínače:
-
-```bash
-python3 tools/artrack_export.py <session>                 # UTM zóna podle GPS
-python3 tools/artrack_export.py <session> --epsg 32633     # konkrétní EPSG
-python3 tools/artrack_export.py <session> --epsg local     # lokální metry, bez GPS
-python3 tools/artrack_export.py <session> --heading 137     # azimut AR osy +X ručně
-python3 tools/artrack_export.py <session> --xmp             # + XMP s rotacemi
-```
-
-Postup v RealityScanu (cesta A, doporučená): nastavit CRS projektu **před**
-importem → načíst fotky z `frames/` → *WORKFLOW → Import Metadata → Trajectory*
-(ve starších verzích *Flight log*) → jako popis sloupců zadat `name x y z` →
-v nastavení alignmentu **zapnout camera priors** → Align Images. Když popis
-sloupců nesedí, import neohlásí chybu, jen sloupce zahodí — po importu zkontroluj
-u pár kamer, že mají prior pozici.
-
-Rotace se do trajektorie záměrně nepíšou: přesnou konvenci omega/phi/kappa
-v RealityScanu jsem neměl z čeho ověřit a špatná rotace je horší než žádná.
-Orientace si alignment dopočítá sám, pozice (a tím měřítko) jsou to cenné.
-
-### Jak se dělá transformace AR → mapa
-
-AR trajektorie je v metrech, ale azimut má libovolný (ARCore nemá kompas).
-Z GPS fixů se proto odhadne **jen otočení kolem svislé osy a posun**, měřítko
-zůstává 1 — AR měřítko je o dva řády lepší než GPS. Export vypíše RMS fitu
-a **nejistotu azimutu** (≈ RMS / délka trasy): na pár metrech je azimut
-nejistý o desítky stupňů, na desítkách metrů jsou to jednotky stupňů.
-Na pozice kamer to má malý vliv (ověřeno na syntetických datech: při 2 m šumu
-GPS jsou pozice do 1 m od pravdy i při chybě azimutu 10°), ale pokud potřebuješ
-model správně otočený k severu, zadej `--heading` nebo exportuj `--epsg local`
-a otoč to v GISu. Převod WGS84 → UTM je ověřený proti `pyproj` (odchylka < 1 mm).
 
 ## Co aplikace *nedělá*
 
@@ -189,14 +209,17 @@ echo "sdk.dir=/cesta/k/Android/sdk" > local.properties
 ./gradlew :app:assembleDebug     # app/build/outputs/apk/debug/app-debug.apk
 ```
 
-AGP 8.13.2, Kotlin 2.1.21, compileSdk 36, ARCore 1.57.0, minSdk 29.
-Kód je v `app/src/main/java/cz/tsk/artrack/` — bez frameworků, 9 souborů:
+ARTrack 1.1 (versionCode 2). AGP 8.13.2, Kotlin 2.1.21, compileSdk 36,
+ARCore 1.57.0, androidx.exifinterface 1.4.2, minSdk 29.
+Kód je v `app/src/main/java/cz/tsk/artrack/` — bez frameworků, 11 souborů:
 
 | soubor | role |
 |---|---|
 | `MainActivity.kt` | lifecycle, ARCore session, start/stop záznamu, UI |
 | `SessionRecorder.kt` | zápis `frames.csv`, `pose.csv`, `gps.csv`, `track.gpx`, `meta.json` |
-| `StillCapturer.kt` | JPEG komprese na worker threadu (zahozený snímek místo zadrhnutí) |
+| `StillCapturer.kt` | JPEG komprese na worker threadu + zápis EXIFu |
+| `RealityScanPackage.kt` | `trajectory.csv` a `jak-importovat.txt` |
+| `Geo.kt` | WGS84 → UTM a fit azimutu AR trajektorie z GPS |
 | `YuvUtil.kt` | YUV_420_888 → NV21 |
 | `LocationTracker.kt` | fused location provider |
 | `Exporter.kt` | přesun složky do `Download/` přes MediaStore |

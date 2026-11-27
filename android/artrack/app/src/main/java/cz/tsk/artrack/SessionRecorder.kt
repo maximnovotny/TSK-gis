@@ -14,7 +14,9 @@ import java.util.Locale
  * recording.
  *
  * Files produced in [dir]:
- *   frames/frame_XXXXXX.jpg - full resolution stills (the photogrammetry input)
+ *   frames/frame_XXXXXX.jpg - full resolution stills with GPS in EXIF (the
+                             photogrammetry input)
+ *   realityscan/            - trajectory.csv and import instructions
  *   frames.csv              - one row per saved still: pose, intrinsics, GPS
  *   pose.csv                - one row per tracked frame: the whole trajectory
  *   video.mp4               - optional ARCore recording (low resolution, for reference)
@@ -32,6 +34,10 @@ class SessionRecorder(val dir: File, private val sessionName: String) {
     private var closed = false
 
     private val fixes = ArrayList<DoubleArray>()   // lat, lon, alt, sysTimeMs
+
+    /** Kept in memory so the RealityScan package can be built when recording stops. */
+    val photoRows = ArrayList<PhotoRow>()
+    val fixRows = ArrayList<FixRow>()
 
     var frameCount = 0
         private set
@@ -157,6 +163,15 @@ class SessionRecorder(val dir: File, private val sessionName: String) {
                 gpsAgeMs(fix)
             )
         )
+        photoRows.add(
+            PhotoRow(
+                name,
+                relativeSeconds(frame.timestamp),
+                t[0].toDouble(),
+                t[1].toDouble(),
+                t[2].toDouble()
+            )
+        )
         stillCount++
     }
 
@@ -182,6 +197,9 @@ class SessionRecorder(val dir: File, private val sessionName: String) {
                 )
             )
             fixes.add(doubleArrayOf(fix.latitude, fix.longitude, fix.altitude, fix.time.toDouble()))
+            fixRows.add(
+                FixRow(lastRelSeconds, fix.latitude, fix.longitude, fix.altitude, fix.accuracy)
+            )
             gpsCount++
         }
     }
@@ -253,7 +271,14 @@ frames/ + frames.csv
   gps_age_ms       how old the fix was at that frame [ms]
 
   The JPEGs are saved unrotated, in camera sensor orientation (landscape), which
-  is the orientation the poses and the intrinsics refer to. No EXIF is written.
+  is the orientation the poses and the intrinsics refer to. EXIF carries the
+  WGS84 position of the frame, the capture time, the device and the 35 mm
+  equivalent focal length; the orientation tag is always 1 (no rotation).
+
+realityscan/
+  trajectory.csv (+ a space separated and a local-metres variant) with the
+  camera positions, and jak-importovat.txt with the import steps and the
+  report of the AR -> map fit. See the repository README for the details.
 
 pose.csv
   The same per-frame data for every tracked frame (not just the saved photos),
