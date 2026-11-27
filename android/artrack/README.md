@@ -117,6 +117,51 @@ ffmpeg -i video.mp4 -vf "select='not(mod(n\,10))'" -vsync 0 -q:v 2 frame_%06d.jp
 # n-tý vyříznutý obrázek odpovídá řádku pose.csv s frame_index = n*10
 ```
 
+## Import do RealityScan (Epic Games)
+
+Export vedle COLMAPu vyrobí i `export/realityscan/`:
+
+| soubor | k čemu |
+|---|---|
+| `trajectory.csv` | pozice kamer `name,x,y,z` v projektovaném CRS (default UTM zóna podle GPS) |
+| `trajectory_space.txt` | totéž oddělené mezerami, kdyby import nebral čárky |
+| `exif_gps.args` | argfile pro `exiftool` — zapíše GPS do EXIFu samotných fotek |
+| `xmp/*.xmp` | (jen s `--xmp`) XMP sidecary s plnou pózou — **experimentální** |
+| `jak-importovat.txt` | postup krok za krokem včetně reportu fitu |
+
+Přepínače:
+
+```bash
+python3 tools/artrack_export.py <session>                 # UTM zóna podle GPS
+python3 tools/artrack_export.py <session> --epsg 32633     # konkrétní EPSG
+python3 tools/artrack_export.py <session> --epsg local     # lokální metry, bez GPS
+python3 tools/artrack_export.py <session> --heading 137     # azimut AR osy +X ručně
+python3 tools/artrack_export.py <session> --xmp             # + XMP s rotacemi
+```
+
+Postup v RealityScanu (cesta A, doporučená): nastavit CRS projektu **před**
+importem → načíst fotky z `frames/` → *WORKFLOW → Import Metadata → Trajectory*
+(ve starších verzích *Flight log*) → jako popis sloupců zadat `name x y z` →
+v nastavení alignmentu **zapnout camera priors** → Align Images. Když popis
+sloupců nesedí, import neohlásí chybu, jen sloupce zahodí — po importu zkontroluj
+u pár kamer, že mají prior pozici.
+
+Rotace se do trajektorie záměrně nepíšou: přesnou konvenci omega/phi/kappa
+v RealityScanu jsem neměl z čeho ověřit a špatná rotace je horší než žádná.
+Orientace si alignment dopočítá sám, pozice (a tím měřítko) jsou to cenné.
+
+### Jak se dělá transformace AR → mapa
+
+AR trajektorie je v metrech, ale azimut má libovolný (ARCore nemá kompas).
+Z GPS fixů se proto odhadne **jen otočení kolem svislé osy a posun**, měřítko
+zůstává 1 — AR měřítko je o dva řády lepší než GPS. Export vypíše RMS fitu
+a **nejistotu azimutu** (≈ RMS / délka trasy): na pár metrech je azimut
+nejistý o desítky stupňů, na desítkách metrů jsou to jednotky stupňů.
+Na pozice kamer to má malý vliv (ověřeno na syntetických datech: při 2 m šumu
+GPS jsou pozice do 1 m od pravdy i při chybě azimutu 10°), ale pokud potřebuješ
+model správně otočený k severu, zadej `--heading` nebo exportuj `--epsg local`
+a otoč to v GISu. Převod WGS84 → UTM je ověřený proti `pyproj` (odchylka < 1 mm).
+
 ## Co aplikace *nedělá*
 
 * Nepřepočítává AR trajektorii do S-JTSK ani ENU — v CSV jsou lokální metry

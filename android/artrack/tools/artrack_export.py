@@ -17,6 +17,9 @@ Two modes, picked automatically:
 Outputs into <session>/export:
       colmap/cameras.txt, colmap/images.txt, colmap/points3D.txt
       frames_geo.csv        per image: WGS84 lat/lon/alt + local AR position
+      realityscan/          trajectory.csv (camera position priors in a projected
+                            or local CRS), exif_gps.args for exiftool, optional
+                            XMP sidecars, and jak-importovat.txt with the steps
       images/               only in video mode: the extracted frames
 
 Standard library only; ffmpeg is needed for video mode.
@@ -151,6 +154,136 @@ def arcore_to_colmap(tx, ty, tz, qx, qy, qz, qw):
     return (qw_c, qx_c, qy_c, qz_c), t_cw
 
 
+# ------------------------------------------------------------------ geodesy
+
+WGS84_A = 6378137.0
+WGS84_F = 1.0 / 298.257223563
+
+
+def utm_zone_for(lon):
+    return int(math.floor((lon + 180.0) / 6.0)) + 1
+
+
+def latlon_to_utm(lat, lon, zone):
+    """
+    Forward UTM (WGS84) after Snyder / USGS Professional Paper 1395.
+    Returns (easting, northing) in metres.
+    """
+    k0 = 0.9996
+    e2 = 2 * WGS84_F - WGS84_F * WGS84_F
+    ep2 = e2 / (1 - e2)
+    lat_r = math.radians(lat)
+    lon_r = math.radians(lon)
+    lon0 = math.radians((zone - 1) * 6 - 180 + 3)
+
+    sin_lat = math.sin(lat_r)
+    cos_lat = math.cos(lat_r)
+    tan_lat = math.tan(lat_r)
+
+    n = WGS84_A / math.sqrt(1 - e2 * sin_lat * sin_lat)
+    t = tan_lat * tan_lat
+    c = ep2 * cos_lat * cos_lat
+    a = (lon_r - lon0) * cos_lat
+
+    m = WGS84_A * (
+        (1 - e2 / 4 - 3 * e2 ** 2 / 64 - 5 * e2 ** 3 / 256) * lat_r
+        - (3 * e2 / 8 + 3 * e2 ** 2 / 32 + 45 * e2 ** 3 / 1024) * math.sin(2 * lat_r)
+        + (15 * e2 ** 2 / 256 + 45 * e2 ** 3 / 1024) * math.sin(4 * lat_r)
+        - (35 * e2 ** 3 / 3072) * math.sin(6 * lat_r)
+    )
+
+    easting = 500000.0 + k0 * n * (
+        a
+        + (1 - t + c) * a ** 3 / 6
+        + (5 - 18 * t + t * t + 72 * c - 58 * ep2) * a ** 5 / 120
+    )
+    northing = k0 * (
+        m
+        + n * tan_lat * (
+            a * a / 2
+            + (5 - t + 9 * c + 4 * c * c) * a ** 4 / 24
+            + (61 - 58 * t + t * t + 600 * c - 330 * ep2) * a ** 6 / 720
+        )
+    )
+    if lat < 0:
+        northing += 10000000.0
+    return easting, northing
+
+
+def ar_horizontal(tx, tz):
+    """
+    ARCore world is Y-up and right handed, so (x, -z) is the horizontal pair that
+    keeps the handedness of (east, north, up). Using (x, z) would mirror the track.
+    """
+    return tx, -tz
+
+
+def track_extent(points):
+    """Largest distance between two points of the track, in metres."""
+    worst = 0.0
+    for i in range(len(points)):
+        for j in range(i + 1, len(points)):
+            d = math.hypot(points[i][0] - points[j][0], points[i][1] - points[j][1])
+            if d > worst:
+                worst = d
+    return worst
+
+
+def fit_heading(ar_xy, enu_xy):
+    """
+    Least squares rotation about the vertical axis plus translation, with the scale
+    locked at 1 (AR is already metric; GPS noise would only corrupt a scale fit).
+    Returns (theta_rad, e0, n0, rms_m).
+    """
+    n = len(ar_xy)
+    ax = sum(p[0] for p in ar_xy) / n
+    ay = sum(p[1] for p in ar_xy) / n
+    ex = sum(p[0] for p in enu_xy) / n
+    ey = sum(p[1] for p in enu_xy) / n
+    num = 0.0
+    den = 0.0
+    for (x, y), (e, nn) in zip(ar_xy, enu_xy):
+        dx, dy = x - ax, y - ay
+        de, dn = e - ex, nn - ey
+        num += dx * dn - dy * de      # cross product
+        den += dx * de + dy * dn      # dot product
+    theta = math.atan2(num, den)
+    cos_t, sin_t = math.cos(theta), math.sin(theta)
+    e0 = ex - (cos_t * ax - sin_t * ay)
+    n0 = ey - (sin_t * ax + cos_t * ay)
+    sq = 0.0
+    for (x, y), (e, nn) in zip(ar_xy, enu_xy):
+        pe = e0 + cos_t * x - sin_t * y
+        pn = n0 + sin_t * x + cos_t * y
+        sq += (pe - e) ** 2 + (pn - nn) ** 2
+    return theta, e0, n0, math.sqrt(sq / n)
+
+
+def interpolate_position(rows, t):
+    """AR position at time t, linearly interpolated from CSV rows with t_rel_s."""
+    if not rows:
+        return None
+    times = [float(r["t_rel_s"]) for r in rows]
+    if t <= times[0]:
+        r = rows[0]
+        return float(r["tx"]), float(r["ty"]), float(r["tz"])
+    if t >= times[-1]:
+        r = rows[-1]
+        return float(r["tx"]), float(r["ty"]), float(r["tz"])
+    lo, hi = 0, len(rows) - 1
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        if times[mid] <= t:
+            lo = mid
+        else:
+            hi = mid
+    w = (t - times[lo]) / (times[hi] - times[lo]) if times[hi] != times[lo] else 0.0
+    a, b = rows[lo], rows[hi]
+    return tuple(
+        float(a[k]) + (float(b[k]) - float(a[k])) * w for k in ("tx", "ty", "tz")
+    )
+
+
 # ------------------------------------------------------------------ extraction
 
 def extract_frames(video, out_dir, step, quality, limit):
@@ -168,6 +301,282 @@ def extract_frames(video, out_dir, step, quality, limit):
     cmd.append(os.path.join(out_dir, "frame_%06d.jpg"))
     subprocess.run(cmd, check=True)
     return sorted(f for f in os.listdir(out_dir) if f.endswith(".jpg"))
+
+
+# -------------------------------------------------------------- realityscan
+
+def matmul(a, b):
+    return [[sum(a[i][k] * b[k][j] for k in range(3)) for j in range(3)] for i in range(3)]
+
+
+def transpose(m):
+    return [[m[j][i] for j in range(3)] for i in range(3)]
+
+
+# AR (x, y, z) -> local project axes (x, -z, y), matching project() below.
+LOCAL_AXES = [[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]]
+
+
+def ar_to_enu_matrix(theta):
+    """
+    Rotation that takes an ARCore world vector (x, y, z) to (east, north, up),
+    where theta is the azimuth of the AR +X axis measured from east.
+    """
+    c, s = math.cos(theta), math.sin(theta)
+    return [[c, 0.0, s],
+            [s, 0.0, -c],
+            [0.0, 1.0, 0.0]]
+
+
+def write_realityscan(out, pairs, fixes, traj_rows, args, meta):
+    """
+    Writes a RealityScan trajectory (camera position priors), an exiftool argfile
+    for the EXIF route, optional XMP sidecars and a step-by-step instruction file.
+    """
+    rs_dir = os.path.join(out, "realityscan")
+    os.makedirs(rs_dir, exist_ok=True)
+
+    local = (args.epsg or "auto").lower() == "local"
+    theta = e0 = n0 = rms = None
+    extent = 0.0
+    zone = None
+    epsg = None
+    alt_offset = 0.0
+    used_fixes = 0
+
+    if not local:
+        good = [f for f in fixes if f[4] >= 0 and f[4] <= args.max_gps_error]
+        if len(good) < 2 and fixes:
+            good = fixes
+        if len(good) < 2:
+            print("note: fewer than two usable GPS fixes - writing a local coordinate "
+                  "system instead of a projected one")
+            local = True
+        else:
+            mean_lon = sum(f[2] for f in good) / len(good)
+            mean_lat = sum(f[1] for f in good) / len(good)
+            if args.epsg and args.epsg.lower() != "auto":
+                epsg = int(args.epsg)
+                zone = epsg - (32700 if epsg >= 32700 else 32600)
+            else:
+                zone = utm_zone_for(mean_lon)
+                epsg = (32600 if mean_lat >= 0 else 32700) + zone
+            ar_xy, enu_xy, alts = [], [], []
+            for t_rel, lat, lon, alt, acc in good:
+                pos = interpolate_position(traj_rows, t_rel)
+                if pos is None:
+                    continue
+                ar_xy.append(ar_horizontal(pos[0], pos[2]))
+                enu_xy.append(latlon_to_utm(lat, lon, zone))
+                alts.append(alt - pos[1])
+            used_fixes = len(ar_xy)
+            if used_fixes < 2:
+                local = True
+            else:
+                if args.heading is not None:
+                    theta = math.radians(args.heading)
+                    cx = sum(p[0] for p in ar_xy) / used_fixes
+                    cy = sum(p[1] for p in ar_xy) / used_fixes
+                    ce = sum(p[0] for p in enu_xy) / used_fixes
+                    cn = sum(p[1] for p in enu_xy) / used_fixes
+                    e0 = ce - (math.cos(theta) * cx - math.sin(theta) * cy)
+                    n0 = cn - (math.sin(theta) * cx + math.cos(theta) * cy)
+                    rms = None
+                else:
+                    theta, e0, n0, rms = fit_heading(ar_xy, enu_xy)
+                alt_offset = sum(alts) / len(alts)
+                extent = track_extent(ar_xy)
+
+    def project(row):
+        tx, ty, tz = float(row["tx"]), float(row["ty"]), float(row["tz"])
+        if local:
+            x, y = ar_horizontal(tx, tz)
+            return x, y, ty
+        x, y = ar_horizontal(tx, tz)
+        c, s = math.cos(theta), math.sin(theta)
+        return (e0 + c * x - s * y, n0 + s * x + c * y, ty + alt_offset)
+
+    rows = [(name, project(row)) for name, row in pairs]
+
+    csv_path = os.path.join(rs_dir, "trajectory.csv")
+    with open(csv_path, "w", newline="") as fh:
+        writer = csv.writer(fh)
+        for name, (x, y, z) in rows:
+            writer.writerow([name, f"{x:.4f}", f"{y:.4f}", f"{z:.4f}"])
+    with open(os.path.join(rs_dir, "trajectory_space.txt"), "w") as fh:
+        for name, (x, y, z) in rows:
+            fh.write(f"{name} {x:.4f} {y:.4f} {z:.4f}\n")
+
+    # EXIF route: stamp the WGS84 position into the JPEGs themselves.
+    args_path = os.path.join(rs_dir, "exif_gps.args")
+    stamped = 0
+    with open(args_path, "w") as fh:
+        for name, row in pairs:
+            lat, lon, alt = row.get("lat"), row.get("lon"), row.get("alt_m")
+            if not lat:
+                fix = interpolate_fix(fixes, float(row["t_rel_s"]))
+                if not fix:
+                    continue
+                lat, lon, alt = f"{fix[0]:.8f}", f"{fix[1]:.8f}", f"{fix[2]:.3f}"
+            fh.write(f"-GPSLatitude={abs(float(lat)):.8f}\n")
+            fh.write(f"-GPSLatitudeRef={'N' if float(lat) >= 0 else 'S'}\n")
+            fh.write(f"-GPSLongitude={abs(float(lon)):.8f}\n")
+            fh.write(f"-GPSLongitudeRef={'E' if float(lon) >= 0 else 'W'}\n")
+            fh.write(f"-GPSAltitude={float(alt):.3f}\n")
+            fh.write("-GPSAltitudeRef=above\n")
+            fh.write(f"{name}\n")
+            fh.write("-execute\n")
+            stamped += 1
+        fh.write("-common_args\n-overwrite_original\n")
+
+    xmp_count = 0
+    if args.xmp:
+        xmp_dir = os.path.join(rs_dir, "xmp")
+        os.makedirs(xmp_dir, exist_ok=True)
+        m_enu = None if local else ar_to_enu_matrix(theta)
+        for (name, row), (_, pos) in zip(pairs, rows):
+            r_gl = quat_to_matrix(float(row["qx"]), float(row["qy"]),
+                                  float(row["qz"]), float(row["qw"]))
+            r_cv = [[r_gl[i][0], -r_gl[i][1], -r_gl[i][2]] for i in range(3)]
+            # same AR -> project axis mapping that project() applies to the positions
+            r_cv = matmul(m_enu if m_enu is not None else LOCAL_AXES, r_cv)
+            r_cw = transpose(r_cv)
+            if args.xmp_transpose:
+                r_cw = transpose(r_cw)
+            width = int(row.get("width") or 0) or int(
+                (meta.get("photo_intrinsics") or {}).get("width") or 0)
+            height = int(row.get("height") or 0) or int(
+                (meta.get("photo_intrinsics") or {}).get("height") or 0)
+            fx, cx, cy = float(row["fx"]), float(row["cx"]), float(row["cy"])
+            f35 = fx / width * 36.0 if width else 0.0
+            ppu = (cx - width / 2.0) / width if width else 0.0
+            ppv = (cy - height / 2.0) / width if width else 0.0
+            flat = " ".join(f"{v:.9f}" for r in r_cw for v in r)
+            stem = os.path.splitext(name)[0]
+            with open(os.path.join(xmp_dir, stem + ".xmp"), "w") as fh:
+                fh.write(f"""<x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description xcr:Version="3" xcr:PosePrior="initial" xcr:Coordinates="absolute"
+      xcr:DistortionModel="brown3" xcr:FocalLength35mm="{f35:.6f}"
+      xcr:Skew="0" xcr:AspectRatio="1"
+      xcr:PrincipalPointU="{ppu:.6f}" xcr:PrincipalPointV="{ppv:.6f}"
+      xcr:CalibrationPrior="initial" xcr:CalibrationGroup="-1" xcr:DistortionGroup="-1"
+      xcr:InTexturing="1" xcr:InMeshing="1"
+      xmlns:xcr="http://www.capturingreality.com/ns/xcr/1.1#">
+      <xcr:Rotation>{flat}</xcr:Rotation>
+      <xcr:Position>{pos[0]:.6f} {pos[1]:.6f} {pos[2]:.6f}</xcr:Position>
+      <xcr:DistortionCoeficients>0 0 0 0 0 0</xcr:DistortionCoeficients>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta>
+""")
+            xmp_count += 1
+
+    crs = "lokální kartézský systém (metry)" if local else f"EPSG:{epsg} (UTM {zone}N)"
+    report = []
+    report.append(f"souřadnicový systém : {crs}")
+    if not local:
+        report.append(f"GPS fixů pro fit    : {used_fixes}")
+        report.append(f"azimut AR osy +X    : {math.degrees(theta) % 360.0:.2f}° od východu"
+                      + (" (zadaný ručně)" if args.heading is not None else ""))
+        report.append("odchylka fitu (RMS) : "
+                      + ("neznámá (heading zadán ručně)" if rms is None else f"{rms:.2f} m"))
+        if rms is not None and extent > 0.1:
+            sigma = math.degrees(rms / extent)
+            report.append(f"nejistota azimutu   : ±{sigma:.1f}° "
+                          f"(trasa {extent:.1f} m)")
+        report.append(f"posun výšky         : {alt_offset:+.2f} m")
+    report.append(f"snímků v trajektorii: {len(rows)}")
+    report.append(f"EXIF bloků           : {stamped}")
+    if args.xmp:
+        report.append(f"XMP souborů         : {xmp_count}")
+
+    with open(os.path.join(rs_dir, "jak-importovat.txt"), "w") as fh:
+        fh.write(instructions_text(local, epsg, zone, report, args))
+
+    print("\nRealityScan:")
+    for line in report:
+        print("  " + line)
+    if rms is not None and extent > 0.1 and math.degrees(rms / extent) > 5.0:
+        print("  POZOR: azimut je z téhle trasy nejistý (krátká trasa vs. šum GPS).")
+        print("         Pozice kamer tím trpí jen málo, ale pokud potřebuješ správné")
+        print("         otočení modelu k severu, zadej --heading <stupně> nebo exportuj")
+        print("         s --epsg local a model otoč v GISu.")
+    return rs_dir
+
+
+def instructions_text(local, epsg, zone, report, args):
+    crs_step = (
+        "1) Nastav souřadnicový systém projektu (karta WORKFLOW / ALIGNMENT ->\n"
+        "   nastavení projektu) na lokální kartézský systém v metrech.\n"
+        if local else
+        f"1) Nastav souřadnicový systém projektu (output/project CRS) na EPSG:{epsg}\n"
+        f"   (UTM zóna {zone}N, WGS84). Tohle musí být PŘED importem trajektorie.\n"
+    )
+    return f"""ARTrack -> RealityScan
+======================
+
+{chr(10).join(report)}
+
+Co je v této složce
+-------------------
+trajectory.csv        pozice kamer: name,x,y,z  (oddělovač čárka)
+trajectory_space.txt  totéž oddělené mezerami (fallback, kdyby import nebral čárky)
+exif_gps.args         argfile pro exiftool - zapíše GPS do EXIFu samotných fotek
+xmp/                  (jen s --xmp) XMP sidecary s plnou pózou - EXPERIMENTÁLNÍ
+jak-importovat.txt    tento soubor
+
+Cesta A - trajektorie jako pozice kamer (doporučeno)
+----------------------------------------------------
+{crs_step}2) Načti fotky ze složky frames/.
+3) WORKFLOW -> Import Metadata -> Trajectory (ve starších verzích Flight log).
+4) Vyber trajectory.csv a jako formát zadej vlastní popis sloupců:
+
+       name x y z
+
+   Pozor: když popis sloupců neodpovídá souboru, import spadne potichu -
+   sloupce se jen zahodí a priors nikde nejsou. Po importu zkontroluj
+   v inspektoru u pár kamer, že mají vyplněnou prior pozici.
+5) V nastavení alignmentu zapni použití camera priors (position prior) -
+   bez toho se naimportované pozice při alignmentu ignorují.
+6) Align Images.
+
+Co z toho vyleze: měřítko a poloha z AR trajektorie (relativně centimetry),
+orientace si RealityScan spočítá sám. Rotace se záměrně neimportují - přesnou
+konvenci omega/phi/kappa v RealityScanu jsem neověřil, a špatně zadaná rotace
+je horší než žádná.
+
+Cesta B - GPS do EXIFu (nejjednodušší, horší měřítko)
+-----------------------------------------------------
+Ve složce frames/ spusť:
+
+       exiftool -@ ../export/realityscan/exif_gps.args
+
+(cestu uprav podle toho, odkud pouštíš). RealityScan pak GPS z EXIFu použije
+jako position prior automaticky. Přesnost je přesnost telefonního GPS,
+tj. jednotky metrů - dobré na posazení modelu do mapy, slabé na měřítko.
+Obě cesty jdou zkombinovat: EXIF na georeferenci, trajektorie na měřítko.
+
+Cesta C - XMP sidecary s plnou pózou (EXPERIMENTÁLNÍ)
+-----------------------------------------------------
+Spusť export s --xmp, zkopíruj xmp/*.xmp vedle fotek do frames/ (stejný název,
+jiná přípona) a načti fotky znovu. RealityScan XMP načítá automaticky.
+xcr:PosePrior="initial" znamená, že pózu může alignment dál upravovat.
+
+NEOVĚŘENO: přesnou konvenci matice xcr:Rotation (world-to-camera vs opačně)
+jsem si nemohl potvrdit v nápovědě RealityScanu. Vyzkoušej to na 10 fotkách:
+pokud kamery míří opačně nebo je model zrcadlený, exportuj znovu s přepínačem
+--xmp-transpose a porovnej. Dokud to nesedí, drž se cesty A.
+
+Jak se počítá transformace AR -> {('lokální systém' if local else f'EPSG:{epsg}')}
+-----------------------------------------------------------------------
+AR trajektorie je v metrech, ale její azimut je libovolný (ARCore nemá kompas).
+Z GPS fixů se proto odhadne jen otočení kolem svislé osy a posun; měřítko se
+nefituje (nechává se 1), protože AR měřítko je o dva řády lepší než GPS.
+RMS výše říká, jak dobře GPS a AR trajektorie sedí - typicky jednotky metrů.
+Krátká trasa (pár metrů) azimut neurčí; pak použij --heading <stupně> nebo
+--epsg local.
+"""
 
 
 # ----------------------------------------------------------------------- main
@@ -262,6 +671,21 @@ def main():
                     help="video mode: stop after N images")
     ap.add_argument("--keep-untracked", action="store_true",
                     help="keep frames whose tracking_state is not TRACKING")
+    ap.add_argument("--epsg", default="auto",
+                    help="RealityScan trajectory CRS: auto (UTM zone from the GPS), "
+                         "local (plain metres, no georeferencing), or an EPSG code "
+                         "such as 32633")
+    ap.add_argument("--heading", type=float, default=None,
+                    help="azimuth of the AR +X axis in degrees from east; overrides "
+                         "the fit from the GPS track")
+    ap.add_argument("--max-gps-error", type=float, default=20.0,
+                    help="ignore GPS fixes with a worse horizontal accuracy [m] "
+                         "when fitting (default 20)")
+    ap.add_argument("--xmp", action="store_true",
+                    help="also write experimental RealityScan XMP sidecars with full poses")
+    ap.add_argument("--xmp-transpose", action="store_true",
+                    help="transpose the XMP rotation matrix (try this if the cameras "
+                         "come out mirrored)")
     args = ap.parse_args()
 
     session = os.path.abspath(args.session)
@@ -302,8 +726,12 @@ def main():
         print(f"using          : {len(pairs)} photos from frames/ ({width}x{height})")
         write_colmap(out, pairs, width, height)
         geo = write_geo(out, pairs, fixes)
+        traj_rows = read_poses(os.path.join(session, "pose.csv")) \
+            if os.path.exists(os.path.join(session, "pose.csv")) else stills
+        write_realityscan(out, pairs, fixes, traj_rows, args, meta)
         print(f"\nwritten to     : {out}")
         print("  colmap/          cameras.txt, images.txt, points3D.txt")
+        print("  realityscan/     trajectory.csv, exif_gps.args, jak-importovat.txt")
         print(f"  {os.path.basename(geo)}   WGS84 + local AR position per image")
         print(f"\nCOLMAP image_path: {frames_dir}")
         print("  colmap feature_extractor --database_path db.db \\")
@@ -343,9 +771,11 @@ def main():
     width, height = pick_size([], meta, "video_intrinsics", video)
     write_colmap(out, pairs, width, height)
     geo = write_geo(out, pairs, fixes)
+    write_realityscan(out, pairs, fixes, poses, args, meta)
     print(f"\nwritten to     : {out}")
     print("  images/          frames cut out of the video")
     print("  colmap/          cameras.txt, images.txt, points3D.txt")
+    print("  realityscan/     trajectory.csv, exif_gps.args, jak-importovat.txt")
     print(f"  {os.path.basename(geo)}   WGS84 + local AR position per image")
     print(f"\nCOLMAP image_path: {images_dir}")
 
