@@ -92,7 +92,7 @@ fixu (±1 snímek), takže GPS a snímky jdou spárovat bez řešení hodinovýc
 Složka záznamu dostane i vlastní `README.txt` s popisem sloupců — data jsou
 samovysvětlující i po roce.
 
-## Export do COLMAP / RealityCapture
+## Export do COLMAPu
 
 ```bash
 python3 tools/artrack_export.py /cesta/k/Download/ARTrack/20261127_143512
