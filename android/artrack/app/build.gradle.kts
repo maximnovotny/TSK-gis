@@ -11,8 +11,8 @@ android {
         applicationId = "cz.tsk.artrack"
         minSdk = 29
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 4
+        versionName = "1.3"
     }
 
     buildTypes {
@@ -37,6 +37,10 @@ android {
     buildFeatures {
         buildConfig = true
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 dependencies {
@@ -46,4 +50,10 @@ dependencies {
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.exifinterface:exifinterface:1.4.2")
     implementation("androidx.documentfile:documentfile:1.1.0")
+
+    // Renders the overlay to PNG on the JVM, so the design can be reviewed
+    // without a device: ./gradlew :app:testDebugUnitTest
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.18.1")
+    testImplementation("androidx.test:core:1.7.0")
 }

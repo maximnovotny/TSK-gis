@@ -16,7 +16,7 @@ a polohu v WGS84 (z GPS).
 
 ## Instalace
 
-APK: [`apk/artrack-debug.apk`](apk/artrack-debug.apk) (v1.2) — podepsané debug klíčem,
+APK: [`apk/artrack-debug.apk`](apk/artrack-debug.apk) (v1.3) — podepsané debug klíčem,
 takže v telefonu stačí povolit instalaci z neznámých zdrojů.
 
 Požadavky:
@@ -25,6 +25,40 @@ Požadavky:
 * telefon [podporovaný ARCore](https://developers.google.com/ar/devices)
   + *Google Play Services for AR* (aplikace si o instalaci řekne sama),
 * oprávnění kamera + přesná poloha.
+
+## Jak to vypadá
+
+| v klidu | při záznamu |
+|---|---|
+| ![ARTrack, klidový stav](docs/ui-idle.png) | ![ARTrack při záznamu](docs/ui-recording.png) |
+
+Overlay je stavěný jako iOS: tmavé „glass" panely s vlasovým okrajem nad
+plnoplošným hledáčkem, systémová paleta (red #FF3B30, green #34C759),
+segmentovaný přepínač s klouzavou pilulkou, iOS switche a spoušť, která se při
+záznamu přelije z kolečka do zaobleného čtverce. Vše s haptickou odezvou.
+
+Při záznamu jde chrome z cesty: místo výběru složky naskočí nahoře časomíra
+s pulzující tečkou, ovládání ztmavne a zamkne se. Layout respektuje výřez
+a gesta (safe area), systémové lišty jsou schované a v landscape se ovládání
+přeskládá do jednoho řádku ([náhled](docs/ui-landscape.png)).
+
+Čím to **není**: panely nejsou doopravdy rozmazané. Android neumí levně
+rozmazat živý náhled kamery pod Android View; místo blur efektu je tedy tmavé
+průsvitné sklo, které nad světlou i tmavou scénou drží čitelnost (ověřeno
+renderem nad bílou i nad šerou scénou).
+
+### Jak jsem ten vzhled ověřil
+
+V repu je `app/src/test/.../OverlayScreenshotTest.kt` — Robolectric s nativní
+grafikou vykreslí overlay do PNG na JVM, bez telefonu:
+
+```bash
+./gradlew :app:testDebugUnitTest     # app/build/ui-preview/*.png
+```
+
+Odhalilo to dvě reálné chyby, které by jinak vylezly až na zařízení: kolizi
+status karty s chipem složky na úzkém displeji a překryv zprávy přes status
+kartu v landscape.
 
 ## Použití
 
@@ -42,7 +76,7 @@ Přepínače (vpravo nahoře, nastavují se před spuštěním záznamu):
 | **Foto: 0,25 / 0,5 / 1 / 2 s / vypnuto** | interval ukládání plnorozlišných JPEG (výchozí 0,5 s) |
 | **Video (VGA)** | zapne i záznam MP4 přes ARCore (výchozí zapnuto) |
 | **Autofocus** | vypnutý (výchozí) = fixní zaostření a tedy konstantní ohnisko pro celou sérii; zapnutý ostří průběžně, ale `fx/fy` se mění snímek po snímku (proto je kalibrace u každého řádku CSV) |
-| **Cíl: …** | kam se záznam uloží — tapnutím vybereš vlastní složku, nebo se vrátíš na výchozí `Download/ARTrack` |
+| **chip se složkou** (vpravo nahoře) | kam se záznam uloží — tapnutím vybereš vlastní složku, nebo se vrátíš na výchozí `Download/ARTrack` |
 
 ### Kam se to ukládá
 
@@ -226,9 +260,10 @@ echo "sdk.dir=/cesta/k/Android/sdk" > local.properties
 ./gradlew :app:assembleDebug     # app/build/outputs/apk/debug/app-debug.apk
 ```
 
-ARTrack 1.2 (versionCode 3). AGP 8.13.2, Kotlin 2.1.21, compileSdk 36,
+ARTrack 1.3 (versionCode 4). AGP 8.13.2, Kotlin 2.1.21, compileSdk 36,
 ARCore 1.57.0, androidx.exifinterface 1.4.2, androidx.documentfile 1.1.0, minSdk 29.
-Kód je v `app/src/main/java/cz/tsk/artrack/` — bez frameworků, 11 souborů:
+Testovací (ne runtime) závislost: Robolectric 4.18.1 pro render overlaye.
+Kód je v `app/src/main/java/cz/tsk/artrack/` — bez frameworků, 13 souborů:
 
 | soubor | role |
 |---|---|
@@ -240,4 +275,5 @@ Kód je v `app/src/main/java/cz/tsk/artrack/` — bez frameworků, 11 souborů:
 | `YuvUtil.kt` | YUV_420_888 → NV21 |
 | `LocationTracker.kt` | fused location provider |
 | `Exporter.kt` | přesun složky do vybrané složky (SAF) nebo do `Download/` (MediaStore) |
+| `ShutterButton.kt`, `SegmentedControl.kt` | vlastní iOS-like ovládací prvky |
 | `BackgroundRenderer.kt`, `ShaderUtil.kt`, `DisplayRotationHelper.kt` | hledáček |

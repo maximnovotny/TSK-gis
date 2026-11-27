@@ -49,6 +49,9 @@ object RealityScanPackage {
             get() = if (local) "lokální kartézský systém (metry)"
             else "EPSG:$epsg (UTM ${zone}N)"
 
+        /** Just the coordinate system, for the one-line message. */
+        fun shortSummary(): String = if (local) "lokální metry" else "EPSG:$epsg"
+
         /** One short line for the UI. */
         fun summary(): String = if (local) {
             "RealityScan: $images snímků, lokální metry"

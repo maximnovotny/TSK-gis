@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:keepScreenOn="true">
@@ -9,74 +10,301 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <TextView
-        android:id="@+id/status"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|start"
-        android:layout_margin="12dp"
-        android:background="@color/panel"
-        android:padding="10dp"
-        android:fontFamily="monospace"
-        android:textColor="#FFFFFFFF"
-        android:textSize="12sp"
-        android:text="..." />
+    <!-- Gradients so white text stays readable over any scene. -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="190dp"
+        android:layout_gravity="top"
+        android:background="@drawable/scrim_top" />
 
-    <LinearLayout
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|end"
-        android:layout_margin="12dp"
-        android:background="@color/panel"
-        android:orientation="vertical"
-        android:padding="8dp">
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="280dp"
+        android:layout_gravity="bottom"
+        android:background="@drawable/scrim_bottom" />
 
-        <Button
-            android:id="@+id/target"
+    <FrameLayout
+        android:id="@+id/overlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <!-- Status card, top left -->
+        <LinearLayout
+            android:id="@+id/statusCard"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="4dp"
-            android:minWidth="150dp"
-            android:textAllCaps="false"
-            android:textSize="13sp"
-            android:text="Cíl: Download/ARTrack" />
+            android:layout_gravity="top|start"
+            android:layout_margin="16dp"
+            android:background="@drawable/glass_card"
+            android:orientation="vertical"
+            android:paddingStart="14dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="11dp"
+            android:paddingBottom="11dp">
 
-        <Button
-            android:id="@+id/interval"
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="15dp"
+                    android:layout_height="15dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_cube" />
+
+                <TextView
+                    android:id="@+id/trackingValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:maxWidth="132dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:letterSpacing="-0.01"
+                    android:textColor="@color/label"
+                    android:textSize="14sp"
+                    android:text="hledám" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="7dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:layout_width="15dp"
+                    android:layout_height="15dp"
+                    android:importantForAccessibility="no"
+                    android:src="@drawable/ic_location" />
+
+                <TextView
+                    android:id="@+id/gpsValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:fontFamily="sans-serif-medium"
+                    android:fontFeatureSettings="tnum"
+                    android:letterSpacing="-0.01"
+                    android:textColor="@color/label"
+                    android:textSize="14sp"
+                    android:text="čekám na fix" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/countsValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="7dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:maxWidth="132dp"
+                android:fontFeatureSettings="tnum"
+                android:letterSpacing="-0.01"
+                android:textColor="@color/label_secondary"
+                android:textSize="13sp"
+                android:text="připraveno" />
+        </LinearLayout>
+
+        <!-- Target folder chip, top right -->
+        <LinearLayout
+            android:id="@+id/targetChip"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:minWidth="150dp"
-            android:textAllCaps="false"
-            android:textSize="13sp"
-            android:text="Foto: 0,5 s" />
+            android:layout_gravity="top|end"
+            android:layout_margin="16dp"
+            android:background="@drawable/glass_pill"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:minHeight="36dp"
+            android:orientation="horizontal"
+            android:paddingStart="13dp"
+            android:paddingEnd="15dp">
 
-        <CheckBox
-            android:id="@+id/video"
+            <ImageView
+                android:layout_width="15dp"
+                android:layout_height="15dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_folder" />
+
+            <TextView
+                android:id="@+id/targetLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="7dp"
+                android:ellipsize="middle"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="-0.01"
+                android:maxWidth="104dp"
+                android:maxLines="1"
+                android:textColor="@color/label"
+                android:textSize="14sp"
+                android:text="Download/ARTrack" />
+        </LinearLayout>
+
+        <!-- Recording timer, top centre; replaces the chip while recording -->
+        <LinearLayout
+            android:id="@+id/recPill"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:textColor="#FFFFFFFF"
-            android:textSize="13sp"
-            android:text="Video (VGA)" />
+            android:layout_gravity="top|center_horizontal"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/glass_pill"
+            android:gravity="center_vertical"
+            android:minHeight="36dp"
+            android:orientation="horizontal"
+            android:paddingStart="13dp"
+            android:paddingEnd="16dp"
+            android:visibility="gone">
 
-        <CheckBox
-            android:id="@+id/autofocus"
-            android:layout_width="wrap_content"
+            <View
+                android:id="@+id/recDot"
+                android:layout_width="8dp"
+                android:layout_height="8dp"
+                android:background="@drawable/dot_red" />
+
+            <TextView
+                android:id="@+id/timerValue"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:fontFamily="sans-serif-medium"
+                android:fontFeatureSettings="tnum"
+                android:letterSpacing="-0.01"
+                android:textColor="@color/label"
+                android:textSize="15sp"
+                android:text="0:00" />
+        </LinearLayout>
+
+        <!-- Controls, bottom -->
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="#FFFFFFFF"
-            android:textSize="13sp"
-            android:text="Autofocus" />
-    </LinearLayout>
+            android:layout_gravity="bottom"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:paddingBottom="22dp">
 
-    <Button
-        android:id="@+id/rec"
-        android:layout_width="96dp"
-        android:layout_height="96dp"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="28dp"
-        android:background="@drawable/rec_button"
-        android:textColor="#FFFFFFFF"
-        android:textStyle="bold"
-        android:textSize="13sp"
-        android:text="REC" />
+            <TextView
+                android:id="@+id/message"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:layout_marginHorizontal="24dp"
+                android:background="@drawable/glass_pill"
+                android:gravity="center"
+                android:letterSpacing="-0.01"
+                android:ellipsize="end"
+                android:maxLines="3"
+                android:paddingHorizontal="15dp"
+                android:paddingVertical="7dp"
+                android:textColor="@color/label"
+                android:textSize="12sp"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/controls"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="6dp"
+                    android:letterSpacing="0.02"
+                    android:shadowColor="#CC000000"
+                    android:shadowDx="0"
+                    android:shadowDy="0"
+                    android:shadowRadius="6"
+                    android:textAllCaps="true"
+                    android:textColor="#D9FFFFFF"
+                    android:textSize="11sp"
+                    android:text="interval fotek" />
+
+                <cz.tsk.artrack.SegmentedControl
+                    android:id="@+id/interval"
+                    android:layout_width="wrap_content"
+                    android:layout_height="34dp" />
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/glass_pill"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingStart="15dp"
+                        android:paddingEnd="6dp"
+                        android:paddingVertical="5dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="9dp"
+                            android:fontFamily="sans-serif-medium"
+                            android:letterSpacing="-0.01"
+                            android:textColor="@color/label"
+                            android:textSize="14sp"
+                            android:text="Video" />
+
+                        <androidx.appcompat.widget.SwitchCompat
+                            android:id="@+id/video"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:switchMinWidth="48dp"
+                            android:thumb="@drawable/ios_switch_thumb"
+                            app:track="@drawable/ios_switch_track" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:background="@drawable/glass_pill"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal"
+                        android:paddingStart="15dp"
+                        android:paddingEnd="6dp"
+                        android:paddingVertical="5dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="9dp"
+                            android:fontFamily="sans-serif-medium"
+                            android:letterSpacing="-0.01"
+                            android:textColor="@color/label"
+                            android:textSize="14sp"
+                            android:text="Autofocus" />
+
+                        <androidx.appcompat.widget.SwitchCompat
+                            android:id="@+id/autofocus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:switchMinWidth="48dp"
+                            android:thumb="@drawable/ios_switch_thumb"
+                            app:track="@drawable/ios_switch_track" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <cz.tsk.artrack.ShutterButton
+                android:id="@+id/rec"
+                android:layout_width="76dp"
+                android:layout_height="76dp"
+                android:layout_marginTop="18dp" />
+        </LinearLayout>
+    </FrameLayout>
 </FrameLayout>

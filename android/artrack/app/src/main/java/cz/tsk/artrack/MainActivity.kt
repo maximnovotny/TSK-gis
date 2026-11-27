@@ -1,9 +1,11 @@
 package cz.tsk.artrack
 
 import android.Manifest
+import android.animation.ObjectAnimator
 import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.location.Location
 import android.net.Uri
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
@@ -13,14 +15,20 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
-import android.widget.Button
-import android.widget.CheckBox
+import android.view.View
+import android.view.animation.LinearInterpolator
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.widget.SwitchCompat
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.google.ar.core.ArCoreApk
 import com.google.ar.core.CameraConfig
 import com.google.ar.core.CameraConfigFilter
@@ -29,6 +37,7 @@ import com.google.ar.core.Frame
 import com.google.ar.core.RecordingConfig
 import com.google.ar.core.RecordingStatus
 import com.google.ar.core.Session
+import com.google.ar.core.TrackingFailureReason
 import com.google.ar.core.TrackingState
 import com.google.ar.core.exceptions.CameraNotAvailableException
 import com.google.ar.core.exceptions.UnavailableException
@@ -44,12 +53,22 @@ import javax.microedition.khronos.opengles.GL10
 class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
 
     private lateinit var surfaceView: GLSurfaceView
-    private lateinit var statusView: TextView
-    private lateinit var recButton: Button
-    private lateinit var intervalButton: Button
-    private lateinit var targetButton: Button
-    private lateinit var videoBox: CheckBox
-    private lateinit var autofocusBox: CheckBox
+    private lateinit var overlay: View
+    private lateinit var statusCard: View
+    private lateinit var trackingValue: TextView
+    private lateinit var gpsValue: TextView
+    private lateinit var countsValue: TextView
+    private lateinit var targetChip: LinearLayout
+    private lateinit var targetLabel: TextView
+    private lateinit var recPill: View
+    private lateinit var recDot: View
+    private lateinit var timerValue: TextView
+    private lateinit var messageView: TextView
+    private lateinit var controls: View
+    private lateinit var intervalControl: SegmentedControl
+    private lateinit var shutter: ShutterButton
+    private lateinit var videoSwitch: SwitchCompat
+    private lateinit var autofocusSwitch: SwitchCompat
 
     private lateinit var rotationHelper: DisplayRotationHelper
     private lateinit var locationTracker: LocationTracker
@@ -71,17 +90,16 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
     @Volatile private var lastStillNs = 0L
     @Volatile private var recordingStartedAtMs = 0L
     @Volatile private var trackingState: TrackingState = TrackingState.STOPPED
-    @Volatile private var failureReason = ""
+    @Volatile private var failureReason: TrackingFailureReason = TrackingFailureReason.NONE
     @Volatile private var ioError = false
     @Volatile private var lastMessage = ""
     @Volatile private var stillIntervalMs = 500L
     @Volatile private var cameraInfo = ""
 
-    private var intervalChoice = 1
-
     /** Folder the finished session is moved to; null means Download/ARTrack. */
     private var targetUri: Uri? = null
     private val prefs by lazy { getSharedPreferences("artrack", MODE_PRIVATE) }
+    private var dotAnimator: ObjectAnimator? = null
 
     private val pickFolder =
         registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
@@ -100,7 +118,7 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
                     .apply()
                 updateTargetLabel()
             } catch (t: Throwable) {
-                fail("Složku nelze trvale povolit: ${t.message}")
+                showMessage("Složku nelze trvale povolit: ${t.message}")
             }
         }
 
@@ -108,7 +126,7 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
     private val statusTicker = object : Runnable {
         override fun run() {
             updateStatus()
-            uiHandler.postDelayed(this, 300L)
+            uiHandler.postDelayed(this, 250L)
         }
     }
 
@@ -117,16 +135,27 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
         setContentView(R.layout.activity_main)
 
         surfaceView = findViewById(R.id.surfaceview)
-        statusView = findViewById(R.id.status)
-        recButton = findViewById(R.id.rec)
-        intervalButton = findViewById(R.id.interval)
-        targetButton = findViewById(R.id.target)
-        videoBox = findViewById(R.id.video)
-        autofocusBox = findViewById(R.id.autofocus)
-        videoBox.isChecked = true
+        overlay = findViewById(R.id.overlay)
+        statusCard = findViewById(R.id.statusCard)
+        trackingValue = findViewById(R.id.trackingValue)
+        gpsValue = findViewById(R.id.gpsValue)
+        countsValue = findViewById(R.id.countsValue)
+        targetChip = findViewById(R.id.targetChip)
+        targetLabel = findViewById(R.id.targetLabel)
+        recPill = findViewById(R.id.recPill)
+        recDot = findViewById(R.id.recDot)
+        timerValue = findViewById(R.id.timerValue)
+        messageView = findViewById(R.id.message)
+        controls = findViewById(R.id.controls)
+        intervalControl = findViewById(R.id.interval)
+        shutter = findViewById(R.id.rec)
+        videoSwitch = findViewById(R.id.video)
+        autofocusSwitch = findViewById(R.id.autofocus)
 
         rotationHelper = DisplayRotationHelper(this)
         locationTracker = LocationTracker(this)
+
+        goEdgeToEdge()
 
         surfaceView.preserveEGLContextOnPause = true
         surfaceView.setEGLContextClientVersion(2)
@@ -134,21 +163,19 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
         surfaceView.setRenderer(this)
         surfaceView.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
 
-        recButton.setOnClickListener {
+        videoSwitch.isChecked = true
+        intervalControl.items = INTERVAL_LABELS.toList()
+        intervalControl.setSelectedSilently(DEFAULT_INTERVAL)
+        stillIntervalMs = INTERVALS[DEFAULT_INTERVAL]
+        intervalControl.onSelected = { index -> stillIntervalMs = INTERVALS[index] }
+
+        shutter.setOnClickListener {
             if (recording) stopRecording("zastaveno uživatelem") else startRecording()
         }
-        intervalButton.setOnClickListener {
-            if (recording) return@setOnClickListener
-            intervalChoice = (intervalChoice + 1) % INTERVALS.size
-            stillIntervalMs = INTERVALS[intervalChoice]
-            intervalButton.text = INTERVAL_LABELS[intervalChoice]
-        }
-        intervalButton.text = INTERVAL_LABELS[intervalChoice]
-        stillIntervalMs = INTERVALS[intervalChoice]
-        autofocusBox.setOnCheckedChangeListener { _, _ -> if (!recording) applyConfig() }
+        autofocusSwitch.setOnCheckedChangeListener { _, _ -> if (!recording) applyConfig() }
 
         restoreTarget()
-        targetButton.setOnClickListener {
+        targetChip.setOnClickListener {
             if (recording) return@setOnClickListener
             AlertDialog.Builder(this)
                 .setTitle("Kam ukládat záznamy")
@@ -157,12 +184,30 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
                 ) { _, which ->
                     if (which == 0) {
                         runCatching { pickFolder.launch(targetUri) }
-                            .onFailure { fail("Výběr složky není dostupný: ${it.message}") }
+                            .onFailure { showMessage("Výběr složky není dostupný: ${it.message}") }
                     } else {
                         clearTarget()
                     }
                 }
                 .show()
+        }
+    }
+
+    /** Full-bleed preview, with the chrome kept out of the notch and the gestures. */
+    private fun goEdgeToEdge() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowInsetsControllerCompat(window, surfaceView).apply {
+            systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsetsCompat.Type.systemBars())
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(overlay) { view, insets ->
+            val safe = insets.getInsets(
+                WindowInsetsCompat.Type.displayCutout() or
+                    WindowInsetsCompat.Type.systemGestures()
+            )
+            view.setPadding(safe.left, safe.top, safe.right, safe.bottom)
+            insets
         }
     }
 
@@ -183,7 +228,7 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
             targetUri = uri
         } else {
             prefs.edit().remove(KEY_TARGET).remove(KEY_TARGET_LABEL).apply()
-            lastMessage = "Dřív vybraná složka už není povolená, ukládám do Download/ARTrack"
+            showMessage("Dřív vybraná složka už není povolená, ukládám do Download/ARTrack")
         }
         updateTargetLabel()
     }
@@ -204,9 +249,8 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
     }
 
     private fun updateTargetLabel() {
-        val label = if (targetUri == null) "Download/ARTrack"
+        targetLabel.text = if (targetUri == null) "Download/ARTrack"
         else prefs.getString(KEY_TARGET_LABEL, null) ?: "vybraná složka"
-        targetButton.text = "Cíl: $label"
     }
 
     // ---------------------------------------------------------------- lifecycle
@@ -234,10 +278,10 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
                     session = created
                     applyConfigLocked(created)
                 } catch (e: UnavailableException) {
-                    fail("ARCore není dostupné: ${e.javaClass.simpleName}")
+                    showMessage("ARCore není dostupné: ${e.javaClass.simpleName}")
                     return
                 } catch (t: Throwable) {
-                    fail("Nelze vytvořit ARCore session: ${t.message}")
+                    showMessage("Nelze vytvořit ARCore session: ${t.message}")
                     return
                 }
             }
@@ -246,7 +290,7 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
                 session?.resume()
             } catch (e: CameraNotAvailableException) {
                 session = null
-                fail("Kamera není dostupná, zkus to znovu")
+                showMessage("Kamera není dostupná, zkus to znovu")
                 return
             }
         }
@@ -302,8 +346,7 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
             }
             if (best != null) {
                 session.cameraConfig = best
-                cameraInfo = "foto ${best.imageSize.width}x${best.imageSize.height}" +
-                    ", video ${best.textureSize.width}x${best.textureSize.height}"
+                cameraInfo = "${best.imageSize.width}×${best.imageSize.height}"
             }
         } catch (t: Throwable) {
             Log.w(TAG, "camera config selection failed", t)
@@ -317,7 +360,7 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
     private fun applyConfigLocked(session: Session) {
         val config = session.config
         config.focusMode =
-            if (autofocusBox.isChecked) Config.FocusMode.AUTO else Config.FocusMode.FIXED
+            if (autofocusSwitch.isChecked) Config.FocusMode.AUTO else Config.FocusMode.FIXED
         config.planeFindingMode = Config.PlaneFindingMode.DISABLED
         config.lightEstimationMode = Config.LightEstimationMode.DISABLED
         config.updateMode = Config.UpdateMode.BLOCKING
@@ -327,21 +370,22 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
     // ---------------------------------------------------------------- recording
 
     private fun startRecording() {
-        val wantVideo = videoBox.isChecked
+        val wantVideo = videoSwitch.isChecked
         synchronized(sessionLock) {
-            val session = this.session ?: run { fail("Session ještě není připravená"); return }
+            val session = this.session
+                ?: run { showMessage("Session ještě není připravená"); return }
 
             val name = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
             val dir = File(getExternalFilesDir(null), "ARTrack/$name")
             if (!dir.mkdirs() && !dir.isDirectory) {
-                fail("Nelze vytvořit složku záznamu")
+                showMessage("Nelze vytvořit složku záznamu")
                 return
             }
 
             try {
                 applyConfigLocked(session)
             } catch (t: Throwable) {
-                fail("Nelze nastavit session: ${t.message}")
+                showMessage("Nelze nastavit session: ${t.message}")
                 return
             }
 
@@ -354,8 +398,10 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
                     session.startRecording(config)
                     videoRecording = true
                 } catch (t: Throwable) {
-                    lastMessage = "Video se nespustilo (${t.javaClass.simpleName}), " +
-                        "jedou jen fotky a trajektorie"
+                    showMessage(
+                        "Video se nespustilo (${t.javaClass.simpleName}), " +
+                            "jedou jen fotky a trajektorie"
+                    )
                 }
             }
 
@@ -371,8 +417,7 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
             locationTracker.last?.let { rec.writeFix(it) }
             locationTracker.onFix = { fix -> recorder?.writeFix(fix) }
         }
-        recButton.setBackgroundResource(R.drawable.rec_button_active)
-        recButton.text = "STOP"
+        setRecordingChrome(true)
     }
 
     private fun stopRecording(reason: String) {
@@ -392,11 +437,10 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
             recorder = null
             stills = null
         }
-        recButton.setBackgroundResource(R.drawable.rec_button)
-        recButton.text = "REC"
+        setRecordingChrome(false)
         if (rec == null) return
 
-        lastMessage = "Ukládám…"
+        showMessage("Ukládám…")
         Thread {
             capturer?.shutdown()
             val rsReport = runCatching {
@@ -405,17 +449,58 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
             rec.finish(buildMeta(rec, capturer, reason, rsReport))
             val result = Exporter.export(this, rec.dir, rec.dir.name, targetUri)
             uiHandler.post {
-                lastMessage = if (result.error == null) {
-                    "Hotovo: ${result.destination}\n${rec.stillCount} fotek, " +
-                        "${result.files} souborů, ${result.bytes / (1024 * 1024)} MB" +
-                        (rsReport?.let { "\n" + it.summary() } ?: "")
+                if (result.error == null) {
+                    showMessage(
+                        "Uloženo do ${result.destination}\n" +
+                            "${rec.stillCount} fotek · ${result.bytes / (1024 * 1024)} MB" +
+                            (rsReport?.let { " · " + it.shortSummary() } ?: "")
+                    )
                 } else {
-                    "Export selhal (${result.error}); soubory zůstaly v " +
-                        "Android/data/$packageName/files/ARTrack/${rec.dir.name}"
+                    showMessage(
+                        "Export selhal (${result.error}). Soubory zůstaly v " +
+                            "Android/data/$packageName/files/ARTrack/${rec.dir.name}"
+                    )
                 }
-                Toast.makeText(this, lastMessage, Toast.LENGTH_LONG).show()
             }
         }.start()
+    }
+
+    /** Recording mode: timer instead of the folder chip, controls out of the way. */
+    private fun setRecordingChrome(active: Boolean) {
+        shutter.isRecording = active
+        recPill.animate().alpha(if (active) 1f else 0f).setDuration(180L).withStartAction {
+            if (active) {
+                recPill.alpha = 0f
+                recPill.visibility = View.VISIBLE
+            }
+        }.withEndAction {
+            if (!active) recPill.visibility = View.GONE
+        }.start()
+        targetChip.animate().alpha(if (active) 0f else 1f).setDuration(180L).withStartAction {
+            if (!active) {
+                targetChip.visibility = View.VISIBLE
+            }
+        }.withEndAction {
+            if (active) targetChip.visibility = View.GONE
+        }.start()
+        controls.animate().alpha(if (active) 0.35f else 1f).setDuration(180L).start()
+        intervalControl.isEnabled = !active
+        videoSwitch.isEnabled = !active
+        autofocusSwitch.isEnabled = !active
+
+        if (active) {
+            dotAnimator = ObjectAnimator.ofFloat(recDot, View.ALPHA, 1f, 0.25f).apply {
+                duration = 800L
+                repeatMode = ObjectAnimator.REVERSE
+                repeatCount = ObjectAnimator.INFINITE
+                interpolator = LinearInterpolator()
+                start()
+            }
+        } else {
+            dotAnimator?.cancel()
+            dotAnimator = null
+            recDot.alpha = 1f
+        }
     }
 
     private fun buildMeta(
@@ -450,7 +535,7 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
         json.put("start_wall_clock_ms", rec.wallClockStartMs)
         json.put("start_elapsed_realtime_ns", rec.elapsedRealtimeStartNs)
         json.put("stop_reason", stopReason)
-        json.put("focus_mode", if (autofocusBox.isChecked) "AUTO" else "FIXED")
+        json.put("focus_mode", if (autofocusSwitch.isChecked) "AUTO" else "FIXED")
         json.put(
             "export_target",
             if (targetUri == null) "Download/ARTrack"
@@ -458,23 +543,35 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
         )
         json.put("io_error", ioError)
 
-        json.put("photo_intrinsics", intrinsicsJson(
-            rec.photoIntrinsics, rec.photoWidth, rec.photoHeight,
-            "Pinhole intrinsics of the JPEGs in frames/ (ARCore image intrinsics). " +
-                "Per-photo values are in frames.csv. No lens distortion model is " +
-                "provided - let the photogrammetry software refine it."
-        ))
-        json.put("video_intrinsics", intrinsicsJson(
-            rec.videoIntrinsics, rec.videoWidth, rec.videoHeight,
-            "Pinhole intrinsics of the video stream (ARCore texture intrinsics); " +
-                "per-frame values are in pose.csv."
-        ))
+        json.put(
+            "photo_intrinsics",
+            intrinsicsJson(
+                rec.photoIntrinsics, rec.photoWidth, rec.photoHeight,
+                "Pinhole intrinsics of the JPEGs in frames/ (ARCore image intrinsics). " +
+                    "Per-photo values are in frames.csv. No lens distortion model is " +
+                    "provided - let the photogrammetry software refine it."
+            )
+        )
+        json.put(
+            "video_intrinsics",
+            intrinsicsJson(
+                rec.videoIntrinsics, rec.videoWidth, rec.videoHeight,
+                "Pinhole intrinsics of the video stream (ARCore texture intrinsics); " +
+                    "per-frame values are in pose.csv."
+            )
+        )
 
         if (cameraConfig != null) {
             val cc = JSONObject()
             cc.put("camera_id", cameraConfig.cameraId)
-            cc.put("cpu_image_size", "${cameraConfig.imageSize.width}x${cameraConfig.imageSize.height}")
-            cc.put("texture_size", "${cameraConfig.textureSize.width}x${cameraConfig.textureSize.height}")
+            cc.put(
+                "cpu_image_size",
+                "${cameraConfig.imageSize.width}x${cameraConfig.imageSize.height}"
+            )
+            cc.put(
+                "texture_size",
+                "${cameraConfig.textureSize.width}x${cameraConfig.textureSize.height}"
+            )
             cc.put("fps_range", cameraConfig.fpsRange.toString())
             cc.put("facing", cameraConfig.facingDirection.name)
             json.put("camera_config", cc)
@@ -532,49 +629,74 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
         put("note", note)
     }
 
-    private fun fail(message: String) {
-        lastMessage = message
-        uiHandler.post { Toast.makeText(this, message, Toast.LENGTH_LONG).show() }
+    // ------------------------------------------------------------------- status
+
+    private fun showMessage(text: String) {
+        lastMessage = text
+        uiHandler.post {
+            messageView.text = text
+            if (messageView.visibility != View.VISIBLE) {
+                messageView.alpha = 0f
+                messageView.visibility = View.VISIBLE
+            }
+            messageView.animate().alpha(1f).setDuration(160L).start()
+            uiHandler.removeCallbacks(hideMessage)
+            uiHandler.postDelayed(hideMessage, 9000L)
+        }
     }
 
-    // ------------------------------------------------------------------- status
+    private val hideMessage = Runnable {
+        messageView.animate().alpha(0f).setDuration(220L).withEndAction {
+            messageView.visibility = View.GONE
+        }.start()
+    }
 
     private fun updateStatus() {
         val rec = recorder
         val capturer = stills
-        val durationS =
-            if (recording) (SystemClock.elapsedRealtime() - recordingStartedAtMs) / 1000.0 else 0.0
+
+        val problem = trackingState != TrackingState.TRACKING
+        trackingValue.text = trackingText()
+        trackingValue.setTextColor(
+            ContextCompat.getColor(this, if (problem) R.color.system_yellow else R.color.label)
+        )
+
         val fix = locationTracker.last
-        val freeMb = getExternalFilesDir(null)?.usableSpace?.div(1024 * 1024) ?: 0L
-        val sb = StringBuilder()
-        sb.append(if (recording) "● REC " else "○ připraveno ")
-        if (recording) sb.append(String.format(Locale.US, "%.1f s", durationS))
-        sb.append('\n')
-        sb.append("tracking: ").append(trackingState.name)
-        if (failureReason.isNotEmpty() && failureReason != "NONE") {
-            sb.append(" (").append(failureReason).append(')')
-        }
-        sb.append('\n')
-        sb.append("fotky: ").append(capturer?.saved ?: 0)
-        if ((capturer?.dropped ?: 0) > 0) sb.append(" (-").append(capturer?.dropped).append(')')
-        sb.append("   snímky: ").append(rec?.frameCount ?: 0)
-        sb.append("   fixy: ").append(rec?.gpsCount ?: 0).append('\n')
-        if (cameraInfo.isNotEmpty()) sb.append(cameraInfo).append('\n')
-        sb.append("GPS: ")
-        if (fix == null) {
-            sb.append("čekám na fix")
+        gpsValue.text = if (fix == null) "čekám na fix"
+        else String.format(Locale.US, "±%.0f m", fix.accuracy)
+
+        countsValue.text = if (recording) {
+            val dropped = capturer?.dropped ?: 0
+            buildString {
+                append(capturer?.saved ?: 0).append(" fotek")
+                if (dropped > 0) append(" (−").append(dropped).append(')')
+                append(" · ").append(rec?.gpsCount ?: 0).append(" fixů")
+                if (ioError) append(" · chyba zápisu videa")
+            }
         } else {
-            sb.append(
-                String.format(
-                    Locale.US, "%.6f, %.6f  ±%.0f m", fix.latitude, fix.longitude, fix.accuracy
-                )
-            )
+            val freeMb = getExternalFilesDir(null)?.usableSpace?.div(1024 * 1024) ?: 0L
+            buildString {
+                if (cameraInfo.isNotEmpty()) append(cameraInfo).append(" · ")
+                append(String.format(Locale.US, "%.0f GB", freeMb / 1024.0))
+            }
         }
-        sb.append('\n')
-        sb.append("volné místo: ").append(freeMb).append(" MB")
-        if (ioError) sb.append("\nCHYBA ZÁPISU VIDEA")
-        if (lastMessage.isNotEmpty()) sb.append('\n').append(lastMessage)
-        statusView.text = sb.toString()
+
+        if (recording) {
+            val seconds = ((SystemClock.elapsedRealtime() - recordingStartedAtMs) / 1000L)
+            timerValue.text = String.format(Locale.US, "%d:%02d", seconds / 60, seconds % 60)
+        }
+    }
+
+    private fun trackingText(): String = when {
+        trackingState == TrackingState.TRACKING -> "tracking"
+        else -> when (failureReason) {
+            TrackingFailureReason.NONE -> "hledám scénu"
+            TrackingFailureReason.BAD_STATE -> "chyba trackingu"
+            TrackingFailureReason.INSUFFICIENT_LIGHT -> "málo světla"
+            TrackingFailureReason.EXCESSIVE_MOTION -> "moc rychlý pohyb"
+            TrackingFailureReason.INSUFFICIENT_FEATURES -> "málo textury"
+            TrackingFailureReason.CAMERA_UNAVAILABLE -> "kamera nedostupná"
+        }
     }
 
     // ------------------------------------------------------------ GL renderer
@@ -586,7 +708,7 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
             glReady = true
         } catch (t: Throwable) {
             Log.e(TAG, "GL init failed", t)
-            fail("Chyba inicializace OpenGL: ${t.message}")
+            showMessage("Chyba inicializace OpenGL: ${t.message}")
         }
     }
 
@@ -608,7 +730,7 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
 
                 val camera = frame.camera
                 trackingState = camera.trackingState
-                failureReason = camera.trackingFailureReason.name
+                failureReason = camera.trackingFailureReason
 
                 if (!recording) return
                 if (videoRecording) {
@@ -636,7 +758,7 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
     }
 
     /** Save a full resolution JPEG if the configured interval has elapsed. */
-    private fun maybeSaveStill(rec: SessionRecorder, frame: Frame, fix: android.location.Location?) {
+    private fun maybeSaveStill(rec: SessionRecorder, frame: Frame, fix: Location?) {
         val capturer = stills ?: return
         if (stillIntervalMs <= 0L) return
         if (frame.camera.trackingState != TrackingState.TRACKING) return
@@ -676,13 +798,12 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
         const val PERMISSION_REQUEST = 42
         const val KEY_TARGET = "target_tree_uri"
         const val KEY_TARGET_LABEL = "target_label"
+        const val DEFAULT_INTERVAL = 1
         val REQUIRED_PERMISSIONS = arrayOf(
             Manifest.permission.CAMERA,
             Manifest.permission.ACCESS_FINE_LOCATION
         )
         val INTERVALS = longArrayOf(250L, 500L, 1000L, 2000L, 0L)
-        val INTERVAL_LABELS = arrayOf(
-            "Foto: 0,25 s", "Foto: 0,5 s", "Foto: 1 s", "Foto: 2 s", "Foto: vypnuto"
-        )
+        val INTERVAL_LABELS = arrayOf("0,25 s", "0,5 s", "1 s", "2 s", "vyp")
     }
 }
