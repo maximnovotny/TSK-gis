@@ -31,7 +31,14 @@ class StillCapturer(sessionDir: File, private val quality: Int = 92) {
 
     val framesDir = File(sessionDir, "frames").apply { mkdirs() }
 
-    private val executor = Executors.newSingleThreadExecutor()
+    // Background priority: on a phone the JPEG work must never outrank the render
+    // thread, or every photo costs tracking frames.
+    private val executor = Executors.newSingleThreadExecutor { runnable ->
+        Thread({
+            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND)
+            runnable.run()
+        }, "artrack-jpeg")
+    }
     private val inFlight = AtomicInteger(0)
     private val savedCount = AtomicInteger(0)
     private val droppedCount = AtomicInteger(0)
@@ -51,7 +58,7 @@ class StillCapturer(sessionDir: File, private val quality: Int = 92) {
     )
 
     /** Returns the file name the frame will be written to, or null if it was dropped. */
-    fun offer(stillIndex: Int, nv21: ByteArray, width: Int, height: Int, tags: Tags): String? {
+    fun offer(stillIndex: Int, planes: YuvPlanes, tags: Tags): String? {
         if (inFlight.get() >= MAX_IN_FLIGHT) {
             droppedCount.incrementAndGet()
             return null
@@ -61,7 +68,9 @@ class StillCapturer(sessionDir: File, private val quality: Int = 92) {
         executor.execute {
             val file = File(framesDir, name)
             try {
-                val yuv = YuvImage(nv21, ImageFormat.NV21, width, height, null)
+                val width = planes.width
+                val height = planes.height
+                val yuv = YuvImage(planes.toNv21(), ImageFormat.NV21, width, height, null)
                 BufferedOutputStream(FileOutputStream(file), 1 shl 16).use {
                     yuv.compressToJpeg(Rect(0, 0, width, height), quality, it)
                 }

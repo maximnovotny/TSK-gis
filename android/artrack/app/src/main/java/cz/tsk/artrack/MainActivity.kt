@@ -87,6 +87,7 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
     @Volatile private var frameIndex = 0
     @Volatile private var stillIndex = 0
     @Volatile private var lastStillNs = 0L
+    @Volatile private var lastLoggedTimestampNs = 0L
     @Volatile private var recordingStartedAtMs = 0L
     @Volatile private var trackingState: TrackingState = TrackingState.STOPPED
     @Volatile private var failureReason: TrackingFailureReason = TrackingFailureReason.NONE
@@ -402,13 +403,19 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
             frameIndex = 0
             stillIndex = 0
             lastStillNs = 0L
+            lastLoggedTimestampNs = 0L
             ioError = false
             recordingStartedAtMs = SystemClock.elapsedRealtime()
             val rec = SessionRecorder(dir, name)
             recorder = rec
             stills = if (stillIntervalMs > 0) StillCapturer(dir) else null
             recording = true
-            locationTracker.last?.let { rec.writeFix(it) }
+            locationTracker.last?.let { fix ->
+                val ageMs = (SystemClock.elapsedRealtimeNanos() - fix.elapsedRealtimeNanos) /
+                    1_000_000L
+                // A fix from minutes ago says where the phone was, not where it is.
+                if (ageMs <= RealityScanPackage.MAX_GPS_AGE_MS) rec.writeFix(fix)
+            }
             locationTracker.onFix = { fix -> recorder?.writeFix(fix) }
         }
         setRecordingChrome(true)
@@ -514,6 +521,8 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
         json.put("android_release", Build.VERSION.RELEASE)
         json.put("android_sdk", Build.VERSION.SDK_INT)
         json.put("frames_tracked", rec.frameCount)
+        json.put("frames_skipped_estimate", rec.framesSkipped)
+        json.put("track_length_m", rec.trackLengthM)
         json.put("photos", rec.stillCount)
         json.put("photos_dropped", capturer?.dropped ?: 0)
         json.put("photos_without_exif", capturer?.exifErrors ?: 0)
@@ -578,6 +587,7 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
             rs.put("epsg", rsReport.epsg ?: JSONObject.NULL)
             rs.put("georeferenced", !rsReport.local)
             rs.put("fit_fixes", rsReport.fitFixes)
+            rs.put("heading_reliable", rsReport.headingReliable)
             rsReport.fit?.let { fit ->
                 rs.put("heading_deg_from_east", fit.headingDeg)
                 rs.put("fit_rms_m", fit.rms)
@@ -664,7 +674,8 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
             buildString {
                 append(capturer?.saved ?: 0).append(" fotek")
                 if (dropped > 0) append(" (−").append(dropped).append(')')
-                append(" · ").append(rec?.gpsCount ?: 0).append(" fixů")
+                append(" · ").append(rec?.gpsCount ?: 0).append(" fixů · ")
+                append(String.format(Locale.US, "%.1f m", rec?.trackLengthM ?: 0.0))
                 if (ioError) append(" · chyba zápisu videa")
             }
         } else {
@@ -739,6 +750,10 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
                 }
 
                 val rec = recorder ?: return
+                // ARCore can hand out the same frame twice; logging it again would
+                // put two rows on one camera frame.
+                if (frame.timestamp == lastLoggedTimestampNs) return
+                lastLoggedTimestampNs = frame.timestamp
                 val fix = locationTracker.last
                 rec.writeFrame(frameIndex, frame, fix)
                 maybeSaveStill(rec, frame, fix)
@@ -760,7 +775,7 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
         if (lastStillNs != 0L && ts - lastStillNs < stillIntervalMs * 1_000_000L) return
         try {
             frame.acquireCameraImage().use { image ->
-                val nv21 = YuvUtil.toNv21(image)
+                val planes = YuvUtil.copyPlanes(image)
                 val intrinsics = frame.camera.imageIntrinsics
                 val focal35 = if (intrinsics.imageDimensions[0] > 0) {
                     intrinsics.focalLength[0].toDouble() /
@@ -773,7 +788,7 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
                     height = image.height,
                     wallClockMs = System.currentTimeMillis()
                 )
-                val name = capturer.offer(stillIndex, nv21, image.width, image.height, tags)
+                val name = capturer.offer(stillIndex, planes, tags)
                 if (name != null) {
                     rec.writeStill(name, frameIndex, frame, fix)
                     stillIndex++

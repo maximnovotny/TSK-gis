@@ -2,56 +2,36 @@ package cz.tsk.artrack
 
 import android.media.Image
 
-/** Converts an ARCore YUV_420_888 camera image into a packed NV21 buffer. */
+/** Gets the YUV planes of an ARCore camera image out of the Image as fast as possible. */
 object YuvUtil {
 
-    fun toNv21(image: Image): ByteArray {
-        val width = image.width
-        val height = image.height
-        val out = ByteArray(width * height * 3 / 2)
+    /**
+     * Three bulk copies, nothing per-pixel: this runs on the render thread, where
+     * every millisecond costs tracking frames.
+     */
+    fun copyPlanes(image: Image): YuvPlanes {
+        val y = image.planes[0]
+        val u = image.planes[1]
+        val v = image.planes[2]
+        return YuvPlanes(
+            y = copyOf(y.buffer),
+            yRowStride = y.rowStride,
+            yPixelStride = y.pixelStride,
+            u = copyOf(u.buffer),
+            uRowStride = u.rowStride,
+            uPixelStride = u.pixelStride,
+            v = copyOf(v.buffer),
+            vRowStride = v.rowStride,
+            vPixelStride = v.pixelStride,
+            width = image.width,
+            height = image.height
+        )
+    }
 
-        // Luma: copy row by row, the plane may be padded.
-        val yPlane = image.planes[0]
-        val yBuffer = yPlane.buffer
-        val yRowStride = yPlane.rowStride
-        val yPixelStride = yPlane.pixelStride
-        var offset = 0
-        if (yPixelStride == 1 && yRowStride == width) {
-            yBuffer.position(0)
-            yBuffer.get(out, 0, width * height)
-            offset = width * height
-        } else {
-            val row = ByteArray(yRowStride)
-            for (y in 0 until height) {
-                yBuffer.position(y * yRowStride)
-                val len = minOf(yRowStride, yBuffer.remaining())
-                yBuffer.get(row, 0, len)
-                if (yPixelStride == 1) {
-                    System.arraycopy(row, 0, out, offset, width)
-                    offset += width
-                } else {
-                    for (x in 0 until width) out[offset++] = row[x * yPixelStride]
-                }
-            }
-        }
-
-        // Chroma: NV21 wants V and U interleaved, V first, at half resolution.
-        val uPlane = image.planes[1]
-        val vPlane = image.planes[2]
-        val uBuffer = uPlane.buffer
-        val vBuffer = vPlane.buffer
-        val chromaHeight = height / 2
-        val chromaWidth = width / 2
-        for (y in 0 until chromaHeight) {
-            val uRow = y * uPlane.rowStride
-            val vRow = y * vPlane.rowStride
-            for (x in 0 until chromaWidth) {
-                val uIndex = uRow + x * uPlane.pixelStride
-                val vIndex = vRow + x * vPlane.pixelStride
-                out[offset++] = if (vIndex < vBuffer.limit()) vBuffer.get(vIndex) else 0
-                out[offset++] = if (uIndex < uBuffer.limit()) uBuffer.get(uIndex) else 0
-            }
-        }
-        return out
+    private fun copyOf(buffer: java.nio.ByteBuffer): ByteArray {
+        buffer.rewind()
+        val bytes = ByteArray(buffer.remaining())
+        buffer.get(bytes)
+        return bytes
     }
 }

@@ -51,6 +51,17 @@ class SessionRecorder(val dir: File, private val sessionName: String) {
         private set
     private var lastRelSeconds = 0.0
 
+    /** Path length of the logged trajectory [m] - the number that decides whether
+     *  the GPS azimuth fit can work at all. */
+    var trackLengthM = 0.0
+        private set
+    private var lastPosition: FloatArray? = null
+
+    /** Camera frames that never reached the render thread, estimated from timestamps. */
+    var framesSkipped = 0
+        private set
+    private var previousTimestampNs = 0L
+
     /** Intrinsics (fx, fy, cx, cy) and size of the video stream of the last frame. */
     var videoIntrinsics = FloatArray(4)
         private set
@@ -67,6 +78,11 @@ class SessionRecorder(val dir: File, private val sessionName: String) {
     var photoHeight = 0
         private set
 
+    private companion object {
+        /** 30 fps cameras; used only to turn timestamp gaps into a frame count. */
+        const val NOMINAL_FRAME_NS = 33_333_333L
+    }
+
     val wallClockStartMs: Long = System.currentTimeMillis()
     val elapsedRealtimeStartNs: Long = SystemClock.elapsedRealtimeNanos()
 
@@ -82,7 +98,7 @@ class SessionRecorder(val dir: File, private val sessionName: String) {
                 "lat,lon,alt_m,gps_acc_m,gps_age_ms\n"
         )
         gpsWriter.write(
-            "t_rel_s_approx,sys_time_ms,elapsed_realtime_ns,lat,lon,alt_m," +
+            "t_rel_s_approx,sys_time_ms,elapsed_realtime_ns,age_ms,lat,lon,alt_m," +
                 "h_acc_m,v_acc_m,speed_mps,bearing_deg,provider\n"
         )
     }
@@ -106,6 +122,23 @@ class SessionRecorder(val dir: File, private val sessionName: String) {
         lastFrameTimestampNs = ts
         val rel = relativeSeconds(ts)
         lastRelSeconds = rel
+
+        if (previousTimestampNs != 0L) {
+            val skipped = Math.round(
+                (ts - previousTimestampNs) / NOMINAL_FRAME_NS.toDouble()
+            ).toInt() - 1
+            if (skipped > 0) framesSkipped += skipped
+        }
+        previousTimestampNs = ts
+
+        lastPosition?.let { previous ->
+            trackLengthM += Math.sqrt(
+                ((t[0] - previous[0]) * (t[0] - previous[0]) +
+                    (t[1] - previous[1]) * (t[1] - previous[1]) +
+                    (t[2] - previous[2]) * (t[2] - previous[2])).toDouble()
+            )
+        }
+        lastPosition = t.copyOf()
 
         val ti = camera.textureIntrinsics
         val focal = ti.focalLength
@@ -179,13 +212,16 @@ class SessionRecorder(val dir: File, private val sessionName: String) {
     fun writeFix(fix: Location) {
         synchronized(lock) {
             if (closed) return
+            val ageMs = (SystemClock.elapsedRealtimeNanos() - fix.elapsedRealtimeNanos) /
+                1_000_000L
             gpsWriter.write(
                 String.format(
                     Locale.US,
-                    "%.6f,%d,%d,%.8f,%.8f,%.3f,%.2f,%.2f,%.3f,%.2f,%s\n",
+                    "%.6f,%d,%d,%d,%.8f,%.8f,%.3f,%.2f,%.2f,%.3f,%.2f,%s\n",
                     lastRelSeconds,
                     fix.time,
                     fix.elapsedRealtimeNanos,
+                    ageMs,
                     fix.latitude,
                     fix.longitude,
                     fix.altitude,
@@ -198,7 +234,10 @@ class SessionRecorder(val dir: File, private val sessionName: String) {
             )
             fixes.add(doubleArrayOf(fix.latitude, fix.longitude, fix.altitude, fix.time.toDouble()))
             fixRows.add(
-                FixRow(lastRelSeconds, fix.latitude, fix.longitude, fix.altitude, fix.accuracy)
+                FixRow(
+                    lastRelSeconds, fix.latitude, fix.longitude, fix.altitude,
+                    fix.accuracy, ageMs
+                )
             )
             gpsCount++
         }
@@ -292,8 +331,10 @@ video.mp4 (only if video recording was enabled)
   is that frame's time in the video.
 
 gps.csv / track.gpx
-  All GPS fixes that arrived while recording. t_rel_s_approx is the video time
-  of the frame that was current when the fix arrived (+-1 frame).
+  All GPS fixes that arrived while recording. t_rel_s_approx is the recording
+  time of the frame that was current when the fix arrived (+-1 frame), age_ms is
+  how old the fix already was then - fixes older than 5 s are kept in the file
+  but left out of the AR -> map fit.
 
 meta.json
   Device, camera config, intrinsics, counters, clock bases.

@@ -18,7 +18,9 @@ class FixRow(
     val lat: Double,
     val lon: Double,
     val alt: Double,
-    val accuracy: Float
+    val accuracy: Float,
+    /** How old the fix already was when it arrived [ms]. */
+    val ageMs: Long = 0L
 )
 
 /**
@@ -36,6 +38,12 @@ object RealityScanPackage {
 
     const val MAX_GPS_ERROR_M = 20f
 
+    /** A fix older than this says where the phone was, not where it is. */
+    const val MAX_GPS_AGE_MS = 5_000L
+
+    /** Above this the azimuth from GPS is noise, whatever the fit returns. */
+    const val MAX_USEFUL_HEADING_SIGMA_DEG = 25.0
+
     class Report(
         val images: Int,
         val local: Boolean,
@@ -49,16 +57,24 @@ object RealityScanPackage {
             get() = if (local) "lokální kartézský systém (metry)"
             else "EPSG:$epsg (UTM ${zone}N)"
 
+        /** Whether the fitted azimuth is worth anything. */
+        val headingReliable: Boolean
+            get() {
+                val sigma = fit?.sigmaDeg ?: return false
+                return sigma <= MAX_USEFUL_HEADING_SIGMA_DEG
+            }
+
         /** Just the coordinate system, for the one-line message. */
         fun shortSummary(): String = if (local) "lokální metry" else "EPSG:$epsg"
 
         /** One short line for the UI. */
         fun summary(): String = if (local) {
             "RealityScan: $images snímků, lokální metry"
-        } else {
-            val sigma = fit?.sigmaDeg
+        } else if (headingReliable) {
             "RealityScan: $images snímků, EPSG:$epsg" +
-                if (sigma != null) String.format(Locale.US, ", azimut ±%.0f°", sigma) else ""
+                String.format(Locale.US, ", azimut ±%.0f°", fit?.sigmaDeg ?: 0.0)
+        } else {
+            "RealityScan: $images snímků, EPSG:$epsg, azimut neurčitelný"
         }
     }
 
@@ -72,7 +88,9 @@ object RealityScanPackage {
             doubleArrayOf(h[0], h[1], p.y)
         }
 
-        val usable = fixes.filter { it.accuracy > 0f && it.accuracy <= MAX_GPS_ERROR_M }
+        val usable = fixes
+            .filter { it.accuracy > 0f && it.accuracy <= MAX_GPS_ERROR_M && it.ageMs <= MAX_GPS_AGE_MS }
+            .ifEmpty { fixes.filter { it.ageMs <= MAX_GPS_AGE_MS } }
             .ifEmpty { fixes }
         var report: Report
         if (usable.size < 2) {
@@ -169,18 +187,21 @@ object RealityScanPackage {
                 append(String.format(Locale.US, "GPS fixů pro fit : %d\n", r.fitFixes))
                 append(String.format(Locale.US, "azimut AR osy +X : %.2f° od východu\n", fit.headingDeg))
                 append(String.format(Locale.US, "odchylka fitu    : %.2f m (RMS)\n", fit.rms))
+                append(String.format(Locale.US, "délka trasy      : %.2f m\n", fit.extent))
                 if (sigma != null) {
-                    append(String.format(
-                        Locale.US, "nejistota azimutu: ±%.1f° (délka trasy %.1f m)\n",
-                        sigma, fit.extent
-                    ))
+                    if (sigma > 45.0) {
+                        append("nejistota azimutu: NEURČITELNÝ (> ±45°)\n")
+                    } else {
+                        append(String.format(Locale.US, "nejistota azimutu: ±%.1f°\n", sigma))
+                    }
                 }
                 append(String.format(Locale.US, "posun výšky      : %+.2f m\n", r.altOffset))
-                if (sigma != null && sigma > 5.0) {
-                    append("\nPOZOR: azimut je z téhle trasy nejistý (krátká trasa vs. šum GPS).\n")
-                    append("Na pozice kamer to má malý vliv, ale pokud potřebuješ model správně\n")
-                    append("otočený k severu, použij trajectory_local.csv a otoč ho v GISu, nebo\n")
-                    append("projdi delší trasu.\n")
+                if (!r.headingReliable) {
+                    append("\nPOZOR: azimut je z téhle trasy neurčitelný - trasa je krátká proti\n")
+                    append("šumu GPS. Pozice kamer tím trpí jen málo (drží je AR trajektorie),\n")
+                    append("ale otočení modelu k severu z těchto dat NEVĚŘ. Použij\n")
+                    append("trajectory_local.csv a model natoč v GISu, nebo projdi při záznamu\n")
+                    append("delší trasu - na ±5° je potřeba řádově 30 m.\n")
                 }
             }
         }

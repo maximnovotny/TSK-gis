@@ -50,13 +50,23 @@ def read_poses(path):
     return rows
 
 
+MAX_GPS_AGE_MS = 5000.0
+
+
 def read_fixes(path):
+    """GPS fixes, without the stale ones: a fix older than 5 s says where the
+    phone was, not where it is. Older recordings have no age_ms column."""
     fixes = []
+    skipped = 0
     if not os.path.exists(path):
         return fixes
     with open(path, newline="") as fh:
         for row in csv.DictReader(fh):
             try:
+                age = float(row.get("age_ms") or 0.0)
+                if age > MAX_GPS_AGE_MS:
+                    skipped += 1
+                    continue
                 fixes.append((
                     float(row["t_rel_s_approx"]),
                     float(row["lat"]),
@@ -66,6 +76,9 @@ def read_fixes(path):
                 ))
             except (KeyError, ValueError):
                 continue
+    if skipped:
+        print(f"note: {skipped} GPS fix(es) older than {MAX_GPS_AGE_MS / 1000:.0f} s "
+              f"left out of the fit")
     fixes.sort(key=lambda f: f[0])
     return fixes
 
@@ -483,8 +496,12 @@ def write_realityscan(out, pairs, fixes, traj_rows, args, meta):
                       + ("neznámá (heading zadán ručně)" if rms is None else f"{rms:.2f} m"))
         if rms is not None and extent > 0.1:
             sigma = math.degrees(rms / extent)
-            report.append(f"nejistota azimutu   : ±{sigma:.1f}° "
-                          f"(trasa {extent:.1f} m)")
+            if sigma > 45.0:
+                report.append(f"nejistota azimutu   : NEURČITELNÝ (> ±45°), "
+                              f"trasa {extent:.1f} m")
+            else:
+                report.append(f"nejistota azimutu   : ±{sigma:.1f}° "
+                              f"(trasa {extent:.1f} m)")
         report.append(f"posun výšky         : {alt_offset:+.2f} m")
     report.append(f"snímků v trajektorii: {len(rows)}")
     report.append(f"EXIF bloků           : {stamped}")
@@ -497,11 +514,11 @@ def write_realityscan(out, pairs, fixes, traj_rows, args, meta):
     print("\nRealityScan:")
     for line in report:
         print("  " + line)
-    if rms is not None and extent > 0.1 and math.degrees(rms / extent) > 5.0:
-        print("  POZOR: azimut je z téhle trasy nejistý (krátká trasa vs. šum GPS).")
-        print("         Pozice kamer tím trpí jen málo, ale pokud potřebuješ správné")
-        print("         otočení modelu k severu, zadej --heading <stupně> nebo exportuj")
-        print("         s --epsg local a model otoč v GISu.")
+    if rms is not None and extent > 0.1 and math.degrees(rms / extent) > 25.0:
+        print("  POZOR: azimut je z téhle trasy neurčitelný (krátká trasa vs. šum GPS).")
+        print("         Pozice kamer tím trpí jen málo, ale otočení modelu k severu")
+        print("         z těchto dat nevěř: zadej --heading <stupně>, exportuj")
+        print("         s --epsg local, nebo při záznamu projdi delší trasu.")
     return rs_dir
 
 

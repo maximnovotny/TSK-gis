@@ -16,7 +16,7 @@ a polohu v WGS84 (z GPS).
 
 ## Instalace
 
-APK: [`apk/artrack-debug.apk`](apk/artrack-debug.apk) (v1.4) — podepsané debug klíčem,
+APK: [`apk/artrack-debug.apk`](apk/artrack-debug.apk) (v1.5) — podepsané debug klíčem,
 takže v telefonu stačí povolit instalaci z neznámých zdrojů.
 
 Požadavky:
@@ -134,6 +134,12 @@ liga složitosti; tady vědomě není.
 `pose.csv` má stejné sloupce pro **každý** trackovaný snímek (celá trajektorie),
 jen `fx,fy,cx,cy` patří video streamu, ne fotkám.
 
+**Pozor na `frame_index` u videa:** je to pořadí zalogovaných snímků, ne pořadí
+snímků ve videu. Při ukládání fotky render thread pár snímků kamery zahodí
+(kolik, hlásí `frames_skipped_estimate` v `meta.json`), takže k videu se páruj
+přes **`t_rel_s`**, což je čas snímku od začátku záznamu — index může po první
+fotce odskočit.
+
 **Konvence:** póza je *camera-to-world*, osy kamery +X vpravo, +Y vzhůru,
 −Z dopředu (OpenGL styl). Jde o `Camera.getPose()`, tedy pózu fyzické kamery,
 kde „vpravo/vzhůru“ je vztažené k **readoutu obrazu**, ne k displeji — póza
@@ -202,6 +208,11 @@ a `meta.json` se zapíše RMS fitu a **nejistota azimutu** (≈ RMS / délka tra
 * obchůzka ~4 m → azimut ±40°, ale pozice kamer do ~1 m,
 * trasa ~40 m → azimut ±4°.
 
+Když nejistota přeleze ±25°, appka azimut označí jako **neurčitelný**
+(`heading_reliable: false` v `meta.json`) místo aby tvářila číslo jako výsledek.
+Ušlou vzdálenost vidíš živě ve stavové kartě a v `meta.json` jako
+`track_length_m`, takže poznáš hned při záznamu, jestli se fit chytne.
+
 Když jsou GPS fixy nepoužitelné (méně než dva s přesností ≤ 20 m), balíček se
 zapíše jen v lokálních metrech a napíše to. Potřebuješ-li model správně otočený
 k severu z krátké trasy, použij `trajectory_local.csv` a otoč to v GISu, nebo
@@ -264,7 +275,7 @@ echo "sdk.dir=/cesta/k/Android/sdk" > local.properties
 ./gradlew :app:assembleDebug     # app/build/outputs/apk/debug/app-debug.apk
 ```
 
-ARTrack 1.4 (versionCode 5). AGP 8.13.2, Kotlin 2.1.21, compileSdk 36,
+ARTrack 1.5 (versionCode 6). AGP 8.13.2, Kotlin 2.1.21, compileSdk 36,
 ARCore 1.57.0, androidx.exifinterface 1.4.2, androidx.documentfile 1.1.0, minSdk 29.
 Testovací (ne runtime) závislost: Robolectric 4.18.1 pro render overlaye.
 Kód je v `app/src/main/java/cz/tsk/artrack/` — bez frameworků, 14 souborů:
@@ -276,7 +287,7 @@ Kód je v `app/src/main/java/cz/tsk/artrack/` — bez frameworků, 14 souborů:
 | `StillCapturer.kt` | JPEG komprese na worker threadu + zápis EXIFu |
 | `RealityScanPackage.kt` | `trajectory.csv` a `jak-importovat.txt` |
 | `Geo.kt` | WGS84 → UTM a fit azimutu AR trajektorie z GPS |
-| `YuvUtil.kt` | YUV_420_888 → NV21 |
+| `YuvUtil.kt`, `YuvPlanes.kt` | YUV_420_888 → NV21 (kopie na render threadu, převod na workeru) |
 | `LocationTracker.kt` | fused location provider |
 | `Exporter.kt` | přesun složky do vybrané složky (SAF) nebo do `Download/` (MediaStore) |
 | `ShutterButton.kt`, `SegmentedControl.kt`, `ActionSheet.kt` | vlastní iOS-like ovládací prvky |
