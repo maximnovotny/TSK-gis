@@ -6,6 +6,8 @@
     <color name="label_secondary">#99EBEBF5</color>
     <color name="glass">#B21C1C1E</color>
     <color name="glass_border">#33FFFFFF</color>
+    <color name="sheet">#F2262628</color>
+    <color name="sheet_separator">#38545458</color>
     <color name="system_red">#FFFF3B30</color>
     <color name="system_green">#FF34C759</color>
     <color name="system_blue">#FF0A84FF</color>

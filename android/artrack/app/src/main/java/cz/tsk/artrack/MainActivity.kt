@@ -2,7 +2,6 @@ package cz.tsk.artrack
 
 import android.Manifest
 import android.animation.ObjectAnimator
-import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
@@ -177,18 +176,13 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
         restoreTarget()
         targetChip.setOnClickListener {
             if (recording) return@setOnClickListener
-            AlertDialog.Builder(this)
-                .setTitle("Kam ukládat záznamy")
-                .setItems(
-                    arrayOf("Vybrat složku…", "Výchozí: Download/ARTrack")
-                ) { _, which ->
-                    if (which == 0) {
-                        runCatching { pickFolder.launch(targetUri) }
-                            .onFailure { showMessage("Výběr složky není dostupný: ${it.message}") }
-                    } else {
-                        clearTarget()
-                    }
+            ActionSheet(this)
+                .title("Kam ukládat záznamy")
+                .choice("Vybrat složku…") {
+                    runCatching { pickFolder.launch(targetUri) }
+                        .onFailure { showMessage("Výběr složky není dostupný: ${it.message}") }
                 }
+                .choice("Výchozí: Download/ARTrack") { clearTarget() }
                 .show()
         }
     }
@@ -249,7 +243,7 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
     }
 
     private fun updateTargetLabel() {
-        targetLabel.text = if (targetUri == null) "Download/ARTrack"
+        targetLabel.text = if (targetUri == null) "Download"
         else prefs.getString(KEY_TARGET_LABEL, null) ?: "vybraná složka"
     }
 

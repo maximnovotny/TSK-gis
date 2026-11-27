@@ -137,14 +137,14 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="7dp"
-                android:ellipsize="middle"
+                android:ellipsize="end"
                 android:fontFamily="sans-serif-medium"
                 android:letterSpacing="-0.01"
-                android:maxWidth="104dp"
+                android:maxWidth="120dp"
                 android:maxLines="1"
                 android:textColor="@color/label"
                 android:textSize="14sp"
-                android:text="Download/ARTrack" />
+                android:text="Download" />
         </LinearLayout>
 
         <!-- Recording timer, top centre; replaces the chip while recording -->

@@ -7,4 +7,17 @@
         <item name="colorAccent">@color/system_blue</item>
         <item name="android:colorBackground">@android:color/black</item>
     </style>
+
+    <style name="ActionSheetAnimation">
+        <item name="android:windowEnterAnimation">@anim/sheet_in</item>
+        <item name="android:windowExitAnimation">@anim/sheet_out</item>
+    </style>
+
+    <style name="Theme.ARTrack.ActionSheet" parent="Theme.AppCompat.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsFloating">false</item>
+        <item name="android:windowAnimationStyle">@style/ActionSheetAnimation</item>
+        <item name="android:backgroundDimAmount">0.45</item>
+        <item name="android:windowSoftInputMode">adjustNothing</item>
+    </style>
 </resources>

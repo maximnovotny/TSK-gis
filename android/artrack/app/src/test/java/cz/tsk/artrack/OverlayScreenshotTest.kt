@@ -40,6 +40,50 @@ class OverlayScreenshotTest {
     fun recordingPortrait() = render("recording-portrait", 1080, 2160, recording = true)
 
     @Test
+    fun folderActionSheet() {
+        val context = ContextThemeWrapper(
+            ApplicationProvider.getApplicationContext(),
+            R.style.Theme_ARTrack
+        )
+        val width = 1080
+        val height = 2160
+        val sheet = ActionSheet.buildContent(
+            context,
+            "Kam ukládat záznamy",
+            listOf(
+                ActionSheet.Choice("Vybrat složku…") {},
+                ActionSheet.Choice("Výchozí: Download/ARTrack") {}
+            )
+        ) {}
+
+        sheet.measure(
+            View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.AT_MOST)
+        )
+        sheet.layout(0, 0, width, sheet.measuredHeight)
+
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.drawPaint(Paint().apply {
+            shader = LinearGradient(
+                0f, 0f, width.toFloat(), height.toFloat(),
+                intArrayOf(0xFF6E7B8B.toInt(), 0xFFB8A58C.toInt(), 0xFF4A4F55.toInt()),
+                floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP
+            )
+        })
+        // The dialog dims whatever is behind it.
+        canvas.drawColor(0x73000000)
+        canvas.save()
+        canvas.translate(0f, (height - sheet.measuredHeight).toFloat())
+        sheet.draw(canvas)
+        canvas.restore()
+
+        val file = File(outDir, "action-sheet.png")
+        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        println("wrote ${file.absolutePath}")
+    }
+
+    @Test
     @Config(qualifiers = "+land")
     fun idleLandscape() = render("idle-landscape", 2160, 1080, recording = false)
 

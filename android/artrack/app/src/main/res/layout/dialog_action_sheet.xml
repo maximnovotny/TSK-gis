@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="10dp"
+    android:paddingBottom="10dp">
+
+    <LinearLayout
+        android:id="@+id/sheetCard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/sheet_card"
+        android:orientation="vertical" />
+
+    <TextView
+        android:id="@+id/sheetCancel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:background="@drawable/sheet_card"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center"
+        android:letterSpacing="-0.01"
+        android:minHeight="56dp"
+        android:paddingVertical="17dp"
+        android:textColor="@color/label"
+        android:textSize="17sp"
+        android:text="Zrušit" />
+</LinearLayout>

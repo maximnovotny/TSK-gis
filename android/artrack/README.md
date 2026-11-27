@@ -16,7 +16,7 @@ a polohu v WGS84 (z GPS).
 
 ## Instalace
 
-APK: [`apk/artrack-debug.apk`](apk/artrack-debug.apk) (v1.3) — podepsané debug klíčem,
+APK: [`apk/artrack-debug.apk`](apk/artrack-debug.apk) (v1.4) — podepsané debug klíčem,
 takže v telefonu stačí povolit instalaci z neznámých zdrojů.
 
 Požadavky:
@@ -36,6 +36,10 @@ Overlay je stavěný jako iOS: tmavé „glass" panely s vlasovým okrajem nad
 plnoplošným hledáčkem, systémová paleta (red #FF3B30, green #34C759),
 segmentovaný přepínač s klouzavou pilulkou, iOS switche a spoušť, která se při
 záznamu přelije z kolečka do zaobleného čtverce. Vše s haptickou odezvou.
+
+Výběr cílové složky otevře **iOS action sheet** ([náhled](docs/ui-sheet.png)) —
+zaoblená karta zespoda, modré akce, „Zrušit" na vlastní kartě — místo stock
+AppCompat dialogu, který vedle zbytku appky vypadal jako cizí těleso.
 
 Při záznamu jde chrome z cesty: místo výběru složky naskočí nahoře časomíra
 s pulzující tečkou, ovládání ztmavne a zamkne se. Layout respektuje výřez
@@ -260,10 +264,10 @@ echo "sdk.dir=/cesta/k/Android/sdk" > local.properties
 ./gradlew :app:assembleDebug     # app/build/outputs/apk/debug/app-debug.apk
 ```
 
-ARTrack 1.3 (versionCode 4). AGP 8.13.2, Kotlin 2.1.21, compileSdk 36,
+ARTrack 1.4 (versionCode 5). AGP 8.13.2, Kotlin 2.1.21, compileSdk 36,
 ARCore 1.57.0, androidx.exifinterface 1.4.2, androidx.documentfile 1.1.0, minSdk 29.
 Testovací (ne runtime) závislost: Robolectric 4.18.1 pro render overlaye.
-Kód je v `app/src/main/java/cz/tsk/artrack/` — bez frameworků, 13 souborů:
+Kód je v `app/src/main/java/cz/tsk/artrack/` — bez frameworků, 14 souborů:
 
 | soubor | role |
 |---|---|
@@ -275,5 +279,5 @@ Kód je v `app/src/main/java/cz/tsk/artrack/` — bez frameworků, 13 souborů:
 | `YuvUtil.kt` | YUV_420_888 → NV21 |
 | `LocationTracker.kt` | fused location provider |
 | `Exporter.kt` | přesun složky do vybrané složky (SAF) nebo do `Download/` (MediaStore) |
-| `ShutterButton.kt`, `SegmentedControl.kt` | vlastní iOS-like ovládací prvky |
+| `ShutterButton.kt`, `SegmentedControl.kt`, `ActionSheet.kt` | vlastní iOS-like ovládací prvky |
 | `BackgroundRenderer.kt`, `ShaderUtil.kt`, `DisplayRotationHelper.kt` | hledáček |
