@@ -1,21 +1,29 @@
 #!/usr/bin/env python3
 """
-Cut frames out of an ARTrack session and export the camera poses.
+Turn an ARTrack session into photogrammetry input: COLMAP poses + a WGS84 list.
 
-An ARTrack session folder contains video.mp4 plus pose.csv / gps.csv / meta.json.
-Row i of pose.csv belongs to video frame i, so selecting every Nth row and every
-Nth video frame keeps images and poses in sync.
+An ARTrack session folder holds frames/ with full resolution JPEGs, frames.csv
+with the camera pose of every JPEG, pose.csv with the whole trajectory, gps.csv
+and meta.json. Optionally also video.mp4, which ARCore records at low resolution.
 
-Outputs (into <session>/export by default):
-    images/frame_000000.jpg ...      extracted frames
-    colmap/cameras.txt               one PINHOLE camera
-    colmap/images.txt                world-to-camera poses, COLMAP convention
-    colmap/points3D.txt              empty, so the folder can be imported as-is
-    frames_geo.csv                   per image: WGS84 lat/lon/alt + local AR XYZ
+Two modes, picked automatically:
 
-Requires ffmpeg on PATH. Standard library only.
+  photos (default when frames.csv has rows)
+      uses the JPEGs in frames/ as they are, no re-encoding, no ffmpeg
+  video (--from-video, or when there are no stills)
+      cuts every Nth frame out of video.mp4 with ffmpeg and takes the pose from
+      the matching row of pose.csv
 
-    python3 artrack_export.py /path/to/20261127_143512 --step 10
+Outputs into <session>/export:
+      colmap/cameras.txt, colmap/images.txt, colmap/points3D.txt
+      frames_geo.csv        per image: WGS84 lat/lon/alt + local AR position
+      images/               only in video mode: the extracted frames
+
+Standard library only; ffmpeg is needed for video mode.
+
+    python3 artrack_export.py /path/to/20261127_143512
+    python3 artrack_export.py /path/to/20261127_143512 --step 2
+    python3 artrack_export.py /path/to/20261127_143512 --from-video --step 10
 """
 
 from __future__ import annotations
@@ -25,7 +33,6 @@ import csv
 import json
 import math
 import os
-import shutil
 import subprocess
 import sys
 
@@ -165,72 +172,10 @@ def extract_frames(video, out_dir, step, quality, limit):
 
 # ----------------------------------------------------------------------- main
 
-def main():
-    ap = argparse.ArgumentParser(description=__doc__,
-                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("session", help="session folder with video.mp4 and pose.csv")
-    ap.add_argument("--step", type=int, default=10,
-                    help="use every Nth video frame (default 10)")
-    ap.add_argument("--out", default=None, help="output folder (default <session>/export)")
-    ap.add_argument("--quality", type=int, default=2,
-                    help="ffmpeg JPEG quality, 2 = best, 31 = worst (default 2)")
-    ap.add_argument("--max-frames", type=int, default=0, help="stop after N images")
-    ap.add_argument("--keep-untracked", action="store_true",
-                    help="keep frames whose tracking_state is not TRACKING")
-    args = ap.parse_args()
-
-    session = os.path.abspath(args.session)
-    video = os.path.join(session, "video.mp4")
-    pose_csv = os.path.join(session, "pose.csv")
-    for required in (video, pose_csv):
-        if not os.path.exists(required):
-            sys.exit(f"missing {required}")
-
-    meta = {}
-    meta_path = os.path.join(session, "meta.json")
-    if os.path.exists(meta_path):
-        with open(meta_path) as fh:
-            meta = json.load(fh)
-
-    poses = read_poses(pose_csv)
-    fixes = read_fixes(os.path.join(session, "gps.csv"))
-    out = args.out or os.path.join(session, "export")
-    images_dir = os.path.join(out, "images")
-    colmap_dir = os.path.join(out, "colmap")
+def write_colmap(out_dir, pairs, width, height):
+    """pairs: list of (image_name, row dict with tx..qw and fx..cy)."""
+    colmap_dir = os.path.join(out_dir, "colmap")
     os.makedirs(colmap_dir, exist_ok=True)
-
-    print(f"session        : {os.path.basename(session)}")
-    print(f"pose rows      : {len(poses)}")
-    print(f"gps fixes      : {len(fixes)}")
-    print(f"extracting every {args.step}. frame ...")
-
-    names = extract_frames(video, images_dir, args.step, args.quality, args.max_frames)
-    print(f"frames written : {len(names)}")
-
-    pairs = []
-    for k, name in enumerate(names):
-        index = k * args.step
-        if index >= len(poses):
-            os.remove(os.path.join(images_dir, name))
-            continue
-        row = poses[index]
-        if not args.keep_untracked and row.get("tracking_state") != "TRACKING":
-            os.remove(os.path.join(images_dir, name))
-            continue
-        pairs.append((name, row))
-
-    if not pairs:
-        sys.exit("no usable frame/pose pairs - was the session tracking at all?")
-    print(f"usable pairs   : {len(pairs)}")
-
-    width = int(meta.get("video_intrinsics", {}).get("width") or 0)
-    height = int(meta.get("video_intrinsics", {}).get("height") or 0)
-    if not (width and height):
-        probe = subprocess.run(
-            ["ffprobe", "-v", "error", "-select_streams", "v:0",
-             "-show_entries", "stream=width,height", "-of", "csv=p=0:s=,", video],
-            check=True, capture_output=True, text=True).stdout.strip()
-        width, height = (int(v) for v in probe.split(","))
 
     fx = sum(float(r["fx"]) for _, r in pairs) / len(pairs)
     fy = sum(float(r["fy"]) for _, r in pairs) / len(pairs)
@@ -238,8 +183,8 @@ def main():
     cy = sum(float(r["cy"]) for _, r in pairs) / len(pairs)
     spread = max(abs(float(r["fx"]) - fx) for _, r in pairs) / fx if fx else 0.0
     if spread > 0.01:
-        print(f"WARNING: focal length varies by {spread * 100:.1f} % "
-              f"(autofocus was on) - let the SfM software refine the intrinsics")
+        print(f"WARNING: focal length varies by {spread * 100:.1f} % (autofocus was on) - "
+              f"let the SfM software refine the intrinsics")
 
     with open(os.path.join(colmap_dir, "cameras.txt"), "w") as fh:
         fh.write("# Camera list with one line of data per camera:\n")
@@ -259,30 +204,150 @@ def main():
                      f"{t[0]:.6f} {t[1]:.6f} {t[2]:.6f} 1 {name}\n\n")
 
     open(os.path.join(colmap_dir, "points3D.txt"), "w").close()
+    return fx, fy, cx, cy
 
-    with open(os.path.join(out, "frames_geo.csv"), "w", newline="") as fh:
+
+def write_geo(out_dir, pairs, fixes):
+    path = os.path.join(out_dir, "frames_geo.csv")
+    with open(path, "w", newline="") as fh:
         writer = csv.writer(fh)
         writer.writerow(["name", "lat", "lon", "alt_m", "gps_acc_m",
                          "x_ar", "y_ar", "z_ar", "t_rel_s"])
+        missing = 0
         for name, row in pairs:
-            t_rel = float(row["t_rel_s"])
-            fix = interpolate_fix(fixes, t_rel)
-            lat, lon, alt, acc = fix if fix else ("", "", "", "")
-            writer.writerow([
-                name,
-                f"{lat:.8f}" if fix else "",
-                f"{lon:.8f}" if fix else "",
-                f"{alt:.3f}" if fix else "",
-                f"{acc:.2f}" if fix else "",
-                row["tx"], row["ty"], row["tz"], row["t_rel_s"],
-            ])
+            lat, lon, alt, acc = row.get("lat"), row.get("lon"), row.get("alt_m"), row.get("gps_acc_m")
+            if not lat:
+                fix = interpolate_fix(fixes, float(row["t_rel_s"]))
+                if fix:
+                    lat, lon, alt, acc = (f"{fix[0]:.8f}", f"{fix[1]:.8f}",
+                                          f"{fix[2]:.3f}", f"{fix[3]:.2f}")
+                else:
+                    missing += 1
+                    lat = lon = alt = acc = ""
+            writer.writerow([name, lat, lon, alt, acc,
+                             row["tx"], row["ty"], row["tz"], row["t_rel_s"]])
+    if missing:
+        print(f"note: {missing} images have no GPS position")
+    return path
 
+
+def pick_size(rows, meta, key, video=None):
+    for row in rows:
+        if row.get("width") and row.get("height"):
+            return int(row["width"]), int(row["height"])
+    info = meta.get(key) or {}
+    if info.get("width") and info.get("height"):
+        return int(info["width"]), int(info["height"])
+    if video:
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height", "-of", "csv=p=0:s=,", video],
+            check=True, capture_output=True, text=True).stdout.strip()
+        return (int(v) for v in probe.split(","))
+    raise SystemExit("cannot determine the image size")
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("session", help="session folder (holds frames.csv / pose.csv)")
+    ap.add_argument("--step", type=int, default=1,
+                    help="use every Nth image (default 1; in video mode 10)")
+    ap.add_argument("--out", default=None, help="output folder (default <session>/export)")
+    ap.add_argument("--from-video", action="store_true",
+                    help="ignore the stills and cut frames out of video.mp4 instead")
+    ap.add_argument("--quality", type=int, default=2,
+                    help="video mode: ffmpeg JPEG quality, 2 = best (default 2)")
+    ap.add_argument("--max-frames", type=int, default=0,
+                    help="video mode: stop after N images")
+    ap.add_argument("--keep-untracked", action="store_true",
+                    help="keep frames whose tracking_state is not TRACKING")
+    args = ap.parse_args()
+
+    session = os.path.abspath(args.session)
+    if not os.path.isdir(session):
+        sys.exit(f"not a folder: {session}")
+
+    meta = {}
+    meta_path = os.path.join(session, "meta.json")
+    if os.path.exists(meta_path):
+        with open(meta_path) as fh:
+            meta = json.load(fh)
+
+    frames_csv = os.path.join(session, "frames.csv")
+    stills = read_poses(frames_csv) if os.path.exists(frames_csv) else []
+    fixes = read_fixes(os.path.join(session, "gps.csv"))
+    out = args.out or os.path.join(session, "export")
+    os.makedirs(out, exist_ok=True)
+
+    print(f"session        : {os.path.basename(session)}")
+    print(f"stills         : {len(stills)}")
+    print(f"gps fixes      : {len(fixes)}")
+
+    if stills and not args.from_video:
+        # ---------------------------------------------------------- photo mode
+        frames_dir = os.path.join(session, "frames")
+        pairs = []
+        for i, row in enumerate(stills):
+            if args.step > 1 and i % args.step:
+                continue
+            if not args.keep_untracked and row.get("tracking_state") != "TRACKING":
+                continue
+            if not os.path.exists(os.path.join(frames_dir, row["image_name"])):
+                continue
+            pairs.append((row["image_name"], row))
+        if not pairs:
+            sys.exit("no usable photo/pose pairs found")
+        width, height = pick_size(stills, meta, "photo_intrinsics")
+        print(f"using          : {len(pairs)} photos from frames/ ({width}x{height})")
+        write_colmap(out, pairs, width, height)
+        geo = write_geo(out, pairs, fixes)
+        print(f"\nwritten to     : {out}")
+        print("  colmap/          cameras.txt, images.txt, points3D.txt")
+        print(f"  {os.path.basename(geo)}   WGS84 + local AR position per image")
+        print(f"\nCOLMAP image_path: {frames_dir}")
+        print("  colmap feature_extractor --database_path db.db \\")
+        print(f"      --image_path {frames_dir} \\")
+        print("      --ImageReader.camera_model PINHOLE")
+        return
+
+    # ------------------------------------------------------------- video mode
+    video = os.path.join(session, "video.mp4")
+    pose_csv = os.path.join(session, "pose.csv")
+    for required in (video, pose_csv):
+        if not os.path.exists(required):
+            sys.exit(f"missing {required}")
+    poses = read_poses(pose_csv)
+    step = args.step if args.step > 1 else 10
+    images_dir = os.path.join(out, "images")
+    print(f"pose rows      : {len(poses)}")
+    print(f"extracting every {step}. video frame ...")
+    names = extract_frames(video, images_dir, step, args.quality, args.max_frames)
+    print(f"frames written : {len(names)}")
+
+    pairs = []
+    for k, name in enumerate(names):
+        index = k * step
+        if index >= len(poses):
+            os.remove(os.path.join(images_dir, name))
+            continue
+        row = poses[index]
+        if not args.keep_untracked and row.get("tracking_state") != "TRACKING":
+            os.remove(os.path.join(images_dir, name))
+            continue
+        pairs.append((name, row))
+    if not pairs:
+        sys.exit("no usable frame/pose pairs - was the session tracking at all?")
+    print(f"usable pairs   : {len(pairs)}")
+
+    width, height = pick_size([], meta, "video_intrinsics", video)
+    write_colmap(out, pairs, width, height)
+    geo = write_geo(out, pairs, fixes)
     print(f"\nwritten to     : {out}")
-    print("  images/          frames for the photogrammetry run")
+    print("  images/          frames cut out of the video")
     print("  colmap/          cameras.txt, images.txt, points3D.txt")
-    print("  frames_geo.csv   WGS84 position + local AR position per image")
-    if shutil.which("colmap") is None:
-        print("\n(colmap is not on PATH here - import the folder on your workstation)")
+    print(f"  {os.path.basename(geo)}   WGS84 + local AR position per image")
+    print(f"\nCOLMAP image_path: {images_dir}")
 
 
 if __name__ == "__main__":

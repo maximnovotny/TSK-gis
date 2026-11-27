@@ -42,6 +42,6 @@ android {
 dependencies {
     implementation("com.google.ar:core:1.57.0")
     implementation("com.google.android.gms:play-services-location:21.3.0")
-    implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.appcompat:appcompat:1.8.0")
+    implementation("androidx.core:core-ktx:1.16.0")
 }

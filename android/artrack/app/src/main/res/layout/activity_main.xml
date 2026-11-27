@@ -22,17 +22,41 @@
         android:textSize="12sp"
         android:text="..." />
 
-    <CheckBox
-        android:id="@+id/autofocus"
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
         android:layout_margin="12dp"
         android:background="@color/panel"
-        android:padding="8dp"
-        android:textColor="#FFFFFFFF"
-        android:textSize="12sp"
-        android:text="Autofocus" />
+        android:orientation="vertical"
+        android:padding="8dp">
+
+        <Button
+            android:id="@+id/interval"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="150dp"
+            android:textAllCaps="false"
+            android:textSize="13sp"
+            android:text="Foto: 0,5 s" />
+
+        <CheckBox
+            android:id="@+id/video"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textColor="#FFFFFFFF"
+            android:textSize="13sp"
+            android:text="Video (VGA)" />
+
+        <CheckBox
+            android:id="@+id/autofocus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#FFFFFFFF"
+            android:textSize="13sp"
+            android:text="Autofocus" />
+    </LinearLayout>
 
     <Button
         android:id="@+id/rec"
