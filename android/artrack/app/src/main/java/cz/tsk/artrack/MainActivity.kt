@@ -1,7 +1,10 @@
 package cz.tsk.artrack
 
 import android.Manifest
+import android.app.AlertDialog
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.opengl.GLES20
 import android.opengl.GLSurfaceView
 import android.os.Build
@@ -14,6 +17,7 @@ import android.widget.Button
 import android.widget.CheckBox
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -43,6 +47,7 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
     private lateinit var statusView: TextView
     private lateinit var recButton: Button
     private lateinit var intervalButton: Button
+    private lateinit var targetButton: Button
     private lateinit var videoBox: CheckBox
     private lateinit var autofocusBox: CheckBox
 
@@ -74,6 +79,31 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
 
     private var intervalChoice = 1
 
+    /** Folder the finished session is moved to; null means Download/ARTrack. */
+    private var targetUri: Uri? = null
+    private val prefs by lazy { getSharedPreferences("artrack", MODE_PRIVATE) }
+
+    private val pickFolder =
+        registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+            if (uri == null) return@registerForActivityResult
+            try {
+                contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+                targetUri = uri
+                val label = Exporter.labelOf(this, uri)
+                prefs.edit()
+                    .putString(KEY_TARGET, uri.toString())
+                    .putString(KEY_TARGET_LABEL, label)
+                    .apply()
+                updateTargetLabel()
+            } catch (t: Throwable) {
+                fail("Složku nelze trvale povolit: ${t.message}")
+            }
+        }
+
     private val uiHandler = Handler(Looper.getMainLooper())
     private val statusTicker = object : Runnable {
         override fun run() {
@@ -90,6 +120,7 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
         statusView = findViewById(R.id.status)
         recButton = findViewById(R.id.rec)
         intervalButton = findViewById(R.id.interval)
+        targetButton = findViewById(R.id.target)
         videoBox = findViewById(R.id.video)
         autofocusBox = findViewById(R.id.autofocus)
         videoBox.isChecked = true
@@ -115,6 +146,67 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
         intervalButton.text = INTERVAL_LABELS[intervalChoice]
         stillIntervalMs = INTERVALS[intervalChoice]
         autofocusBox.setOnCheckedChangeListener { _, _ -> if (!recording) applyConfig() }
+
+        restoreTarget()
+        targetButton.setOnClickListener {
+            if (recording) return@setOnClickListener
+            AlertDialog.Builder(this)
+                .setTitle("Kam ukládat záznamy")
+                .setItems(
+                    arrayOf("Vybrat složku…", "Výchozí: Download/ARTrack")
+                ) { _, which ->
+                    if (which == 0) {
+                        runCatching { pickFolder.launch(targetUri) }
+                            .onFailure { fail("Výběr složky není dostupný: ${it.message}") }
+                    } else {
+                        clearTarget()
+                    }
+                }
+                .show()
+        }
+    }
+
+    // ------------------------------------------------------------ target folder
+
+    /** Reuse the folder picked earlier, as long as the permission survived. */
+    private fun restoreTarget() {
+        val stored = prefs.getString(KEY_TARGET, null)
+        if (stored == null) {
+            updateTargetLabel()
+            return
+        }
+        val uri = runCatching { Uri.parse(stored) }.getOrNull()
+        val granted = uri != null && contentResolver.persistedUriPermissions.any {
+            it.uri == uri && it.isWritePermission
+        }
+        if (granted) {
+            targetUri = uri
+        } else {
+            prefs.edit().remove(KEY_TARGET).remove(KEY_TARGET_LABEL).apply()
+            lastMessage = "Dřív vybraná složka už není povolená, ukládám do Download/ARTrack"
+        }
+        updateTargetLabel()
+    }
+
+    private fun clearTarget() {
+        targetUri?.let { uri ->
+            runCatching {
+                contentResolver.releasePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+            }
+        }
+        targetUri = null
+        prefs.edit().remove(KEY_TARGET).remove(KEY_TARGET_LABEL).apply()
+        updateTargetLabel()
+    }
+
+    private fun updateTargetLabel() {
+        val label = if (targetUri == null) "Download/ARTrack"
+        else prefs.getString(KEY_TARGET_LABEL, null) ?: "vybraná složka"
+        targetButton.text = "Cíl: $label"
     }
 
     // ---------------------------------------------------------------- lifecycle
@@ -311,10 +403,10 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
                 RealityScanPackage.write(rec.dir, rec.photoRows, rec.fixRows)
             }.onFailure { Log.w(TAG, "RealityScan package failed", it) }.getOrNull()
             rec.finish(buildMeta(rec, capturer, reason, rsReport))
-            val result = Exporter.export(this, rec.dir, rec.dir.name)
+            val result = Exporter.export(this, rec.dir, rec.dir.name, targetUri)
             uiHandler.post {
                 lastMessage = if (result.error == null) {
-                    "Hotovo: ${result.relativePath}\n${rec.stillCount} fotek, " +
+                    "Hotovo: ${result.destination}\n${rec.stillCount} fotek, " +
                         "${result.files} souborů, ${result.bytes / (1024 * 1024)} MB" +
                         (rsReport?.let { "\n" + it.summary() } ?: "")
                 } else {
@@ -359,6 +451,11 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
         json.put("start_elapsed_realtime_ns", rec.elapsedRealtimeStartNs)
         json.put("stop_reason", stopReason)
         json.put("focus_mode", if (autofocusBox.isChecked) "AUTO" else "FIXED")
+        json.put(
+            "export_target",
+            if (targetUri == null) "Download/ARTrack"
+            else prefs.getString(KEY_TARGET_LABEL, null) ?: "vybraná složka"
+        )
         json.put("io_error", ioError)
 
         json.put("photo_intrinsics", intrinsicsJson(
@@ -577,6 +674,8 @@ class MainActivity : AppCompatActivity(), GLSurfaceView.Renderer {
         const val TAG = "ARTrack"
         const val ARCORE_VERSION = "1.57.0"
         const val PERMISSION_REQUEST = 42
+        const val KEY_TARGET = "target_tree_uri"
+        const val KEY_TARGET_LABEL = "target_label"
         val REQUIRED_PERMISSIONS = arrayOf(
             Manifest.permission.CAMERA,
             Manifest.permission.ACCESS_FINE_LOCATION

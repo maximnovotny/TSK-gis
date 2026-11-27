@@ -11,8 +11,8 @@ android {
         applicationId = "cz.tsk.artrack"
         minSdk = 29
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
     }
 
     buildTypes {
@@ -45,4 +45,5 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.8.0")
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.exifinterface:exifinterface:1.4.2")
+    implementation("androidx.documentfile:documentfile:1.1.0")
 }

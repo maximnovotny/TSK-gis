@@ -16,7 +16,7 @@ a polohu v WGS84 (z GPS).
 
 ## Instalace
 
-APK: [`apk/artrack-debug.apk`](apk/artrack-debug.apk) (v1.1) — podepsané debug klíčem,
+APK: [`apk/artrack-debug.apk`](apk/artrack-debug.apk) (v1.2) — podepsané debug klíčem,
 takže v telefonu stačí povolit instalaci z neznámých zdrojů.
 
 Požadavky:
@@ -32,8 +32,8 @@ Požadavky:
 2. Počkat na GPS fix (řádek `GPS:` ukáže souřadnice a přesnost).
 3. **REC** → záznam. Chodit **pomalu a plynule**, bez rychlých otočení,
    objekt snímat s velkým překryvem.
-4. **STOP** → aplikace dopíše CSV a přesune celou složku do
-   `Download/ARTrack/<datum_čas>/`, odkud ji vytáhneš přes USB nebo správce souborů.
+4. **STOP** → aplikace dopíše CSV a přesune celou složku do cílové složky —
+   výchozí je `Download/ARTrack/<datum_čas>/`, nebo kam si nastavíš (viz níž).
 
 Přepínače (vpravo nahoře, nastavují se před spuštěním záznamu):
 
@@ -42,6 +42,23 @@ Přepínače (vpravo nahoře, nastavují se před spuštěním záznamu):
 | **Foto: 0,25 / 0,5 / 1 / 2 s / vypnuto** | interval ukládání plnorozlišných JPEG (výchozí 0,5 s) |
 | **Video (VGA)** | zapne i záznam MP4 přes ARCore (výchozí zapnuto) |
 | **Autofocus** | vypnutý (výchozí) = fixní zaostření a tedy konstantní ohnisko pro celou sérii; zapnutý ostří průběžně, ale `fx/fy` se mění snímek po snímku (proto je kalibrace u každého řádku CSV) |
+| **Cíl: …** | kam se záznam uloží — tapnutím vybereš vlastní složku, nebo se vrátíš na výchozí `Download/ARTrack` |
+
+### Kam se to ukládá
+
+Tlačítko **Cíl** otevře systémový výběr složky (Storage Access Framework), takže
+jde zvolit cokoli, co má zapisovatelný poskytovatel: interní úložiště, **SD karta**,
+USB flash přes OTG i cloudová složka (Drive, Dropbox…). Oprávnění ke složce se
+drží trvale, takže se vybírá jednou; když ho systém po reinstalaci nebo odebrání
+práv zahodí, appka to napíše a spadne zpátky na `Download/ARTrack`.
+
+Záznam se uloží jako podsložka `<datum_čas>/` přímo ve vybrané složce (žádná
+mezivrstva `ARTrack/`). Dokud se celý přenos nepovede, kopie zůstává v privátní
+složce aplikace a chybová zpráva řekne kde — nic se nemaže dřív, než je venku.
+
+Cloudová složka má jeden háček: nahrává se přes poskytovatele, takže je to
+pomalejší a při slabém signálu to může selhat. Na stovky fotek je spolehlivější
+uložit lokálně a nasdílet potom.
 
 Záznam se sám ukončí, když aplikaci přepneš do pozadí.
 
@@ -95,11 +112,11 @@ samovysvětlující i po roce.
 
 ## Import do RealityScan (Epic Games)
 
-Od verze 1.1 je **výstup z telefonu rovnou importovatelný balíček** — nic se na
-PC nedopočítává:
+Výstup z telefonu je **rovnou importovatelný balíček** — nic se na PC
+nedopočítává (v cílové složce, výchozí `Download/ARTrack/`):
 
 ```
-Download/ARTrack/20261127_143512/
+20261127_143512/
 ├── frames/              fotky v plném rozlišení, GPS zapsané přímo v EXIFu
 ├── realityscan/
 │   ├── trajectory.csv          pozice kamer name,x,y,z v UTM (podle GPS)
@@ -209,8 +226,8 @@ echo "sdk.dir=/cesta/k/Android/sdk" > local.properties
 ./gradlew :app:assembleDebug     # app/build/outputs/apk/debug/app-debug.apk
 ```
 
-ARTrack 1.1 (versionCode 2). AGP 8.13.2, Kotlin 2.1.21, compileSdk 36,
-ARCore 1.57.0, androidx.exifinterface 1.4.2, minSdk 29.
+ARTrack 1.2 (versionCode 3). AGP 8.13.2, Kotlin 2.1.21, compileSdk 36,
+ARCore 1.57.0, androidx.exifinterface 1.4.2, androidx.documentfile 1.1.0, minSdk 29.
 Kód je v `app/src/main/java/cz/tsk/artrack/` — bez frameworků, 11 souborů:
 
 | soubor | role |
@@ -222,5 +239,5 @@ Kód je v `app/src/main/java/cz/tsk/artrack/` — bez frameworků, 11 souborů:
 | `Geo.kt` | WGS84 → UTM a fit azimutu AR trajektorie z GPS |
 | `YuvUtil.kt` | YUV_420_888 → NV21 |
 | `LocationTracker.kt` | fused location provider |
-| `Exporter.kt` | přesun složky do `Download/` přes MediaStore |
+| `Exporter.kt` | přesun složky do vybrané složky (SAF) nebo do `Download/` (MediaStore) |
 | `BackgroundRenderer.kt`, `ShaderUtil.kt`, `DisplayRotationHelper.kt` | hledáček |
