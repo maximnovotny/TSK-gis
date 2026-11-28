@@ -16,7 +16,7 @@ a polohu v WGS84 (z GPS).
 
 ## Instalace
 
-APK: [`apk/artrack-debug.apk`](apk/artrack-debug.apk) (v1.6) — podepsané debug klíčem,
+APK: [`apk/artrack-debug.apk`](apk/artrack-debug.apk) (v1.7) — podepsané debug klíčem,
 takže v telefonu stačí povolit instalaci z neznámých zdrojů.
 
 Požadavky:
@@ -30,46 +30,21 @@ Požadavky:
 
 ![Ikona aplikace](docs/icon-preview.png)
 
-Ikona je adaptivní (`mipmap-anydpi-v26`): maskovatelný popředí ve všech pěti
-hustotách, pozadí barvou `#0E2733` a **monochromatická vrstva** pro tematické
-ikony na Androidu 13+. Zdrojová kresba se vejde do bezpečné zóny 72 dp, takže ji
-žádná maska neořízne.
+Ikona je adaptivní s **průhledným pozadím** — maskot plave přímo na ploše, žádná
+dlaždice ([na domovské obrazovce](docs/icon-on-homescreen.png)). Má popředí ve
+všech pěti hustotách a monochromatickou vrstvu pro tematické ikony Androidu 13+.
 
-| v klidu | při záznamu |
-|---|---|
-| ![ARTrack, klidový stav](docs/ui-idle.png) | ![ARTrack při záznamu](docs/ui-recording.png) |
-
-Overlay je stavěný jako iOS: tmavé „glass" panely s vlasovým okrajem nad
-plnoplošným hledáčkem, systémová paleta (red #FF3B30, green #34C759),
-segmentovaný přepínač s klouzavou pilulkou, iOS switche a spoušť, která se při
-záznamu přelije z kolečka do zaobleného čtverce. Vše s haptickou odezvou.
-
-Výběr cílové složky otevře **iOS action sheet** ([náhled](docs/ui-sheet.png)) —
-zaoblená karta zespoda, modré akce, „Zrušit" na vlastní kartě — místo stock
-AppCompat dialogu, který vedle zbytku appky vypadal jako cizí těleso.
-
-Při záznamu jde chrome z cesty: místo výběru složky naskočí nahoře časomíra
-s pulzující tečkou, ovládání ztmavne a zamkne se. Layout respektuje výřez
-a gesta (safe area), systémové lišty jsou schované a v landscape se ovládání
-přeskládá do jednoho řádku ([náhled](docs/ui-landscape.png)).
-
-Čím to **není**: panely nejsou doopravdy rozmazané. Android neumí levně
-rozmazat živý náhled kamery pod Android View; místo blur efektu je tedy tmavé
-průsvitné sklo, které nad světlou i tmavou scénou drží čitelnost (ověřeno
-renderem nad bílou i nad šerou scénou).
-
-### Jak jsem ten vzhled ověřil
-
-V repu je `app/src/test/.../OverlayScreenshotTest.kt` — Robolectric s nativní
-grafikou vykreslí overlay do PNG na JVM, bez telefonu:
+Průhlednost má jeden důsledek: co přečuhuje přes masku launcheru, to se uřízne,
+a bez pozadí je ten řez vidět. Kresba proto sedí v **70 ze 108 dp** — největší
+velikost, při které squircle maska neukrojí nic a kolečková jen oškrábne dva
+konce chapadel (0,6 % kresby). Přegenerovat jde kdykoli:
 
 ```bash
-./gradlew :app:testDebugUnitTest     # app/build/ui-preview/*.png
+python3 tools/make_icons.py     # ze zdroje docs/icon-source.png, potřebuje pillow
 ```
 
-Odhalilo to dvě reálné chyby, které by jinak vylezly až na zařízení: kolizi
-status karty s chipem složky na úzkém displeji a překryv zprávy přes status
-kartu v landscape.
+Skript rovnou vypíše, kolik pixelů by která maska uřízla, takže změna velikosti
+není hádání.
 
 ## Použití
 
@@ -282,7 +257,7 @@ echo "sdk.dir=/cesta/k/Android/sdk" > local.properties
 ./gradlew :app:assembleDebug     # app/build/outputs/apk/debug/app-debug.apk
 ```
 
-ARTrack 1.6 (versionCode 7). AGP 8.13.2, Kotlin 2.1.21, compileSdk 36,
+ARTrack 1.7 (versionCode 8). AGP 8.13.2, Kotlin 2.1.21, compileSdk 36,
 ARCore 1.57.0, androidx.exifinterface 1.4.2, androidx.documentfile 1.1.0, minSdk 29.
 Testovací (ne runtime) závislost: Robolectric 4.18.1 pro render overlaye.
 Kód je v `app/src/main/java/cz/tsk/artrack/` — bez frameworků, 14 souborů:
