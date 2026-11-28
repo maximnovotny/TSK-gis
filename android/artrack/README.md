@@ -16,7 +16,7 @@ a polohu v WGS84 (z GPS).
 
 ## Instalace
 
-APK: [`apk/artrack-debug.apk`](apk/artrack-debug.apk) (v1.5) — podepsané debug klíčem,
+APK: [`apk/artrack-debug.apk`](apk/artrack-debug.apk) (v1.6) — podepsané debug klíčem,
 takže v telefonu stačí povolit instalaci z neznámých zdrojů.
 
 Požadavky:
@@ -27,6 +27,13 @@ Požadavky:
 * oprávnění kamera + přesná poloha.
 
 ## Jak to vypadá
+
+![Ikona aplikace](docs/icon-preview.png)
+
+Ikona je adaptivní (`mipmap-anydpi-v26`): maskovatelný popředí ve všech pěti
+hustotách, pozadí barvou `#0E2733` a **monochromatická vrstva** pro tematické
+ikony na Androidu 13+. Zdrojová kresba se vejde do bezpečné zóny 72 dp, takže ji
+žádná maska neořízne.
 
 | v klidu | při záznamu |
 |---|---|
@@ -275,7 +282,7 @@ echo "sdk.dir=/cesta/k/Android/sdk" > local.properties
 ./gradlew :app:assembleDebug     # app/build/outputs/apk/debug/app-debug.apk
 ```
 
-ARTrack 1.5 (versionCode 6). AGP 8.13.2, Kotlin 2.1.21, compileSdk 36,
+ARTrack 1.6 (versionCode 7). AGP 8.13.2, Kotlin 2.1.21, compileSdk 36,
 ARCore 1.57.0, androidx.exifinterface 1.4.2, androidx.documentfile 1.1.0, minSdk 29.
 Testovací (ne runtime) závislost: Robolectric 4.18.1 pro render overlaye.
 Kód je v `app/src/main/java/cz/tsk/artrack/` — bez frameworků, 14 souborů:

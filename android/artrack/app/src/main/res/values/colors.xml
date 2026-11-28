@@ -1,5 +1,6 @@
 <resources>
-    <color name="ic_launcher_background">#101418</color>
+    <!-- deep water, so the black pixel outlines of the mascot stay readable -->
+    <color name="ic_launcher_background">#0E2733</color>
 
     <!-- iOS system palette, dark appearance -->
     <color name="label">#FFFFFFFF</color>
