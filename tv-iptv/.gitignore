@@ -1,0 +1,4 @@
+.buildResult/
+*.wgt
+dev/shots/
+dev/epg.demo.xml

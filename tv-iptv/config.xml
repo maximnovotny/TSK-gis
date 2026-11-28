@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns:tizen="http://tizen.org/ns/widgets" xmlns="http://www.w3.org/ns/widgets"
+        id="http://tsk.local/iptvhrac" version="1.0.0" viewmodes="maximized">
+  <tizen:application id="IptvHrac01.IptvHrac" package="IptvHrac01" required_version="5.0"/>
+  <content src="index.html"/>
+  <feature name="http://tizen.org/feature/network.internet"/>
+  <icon src="icon.png"/>
+  <name>IPTV Hrac</name>
+  <tizen:profile name="tv-samsung"/>
+  <tizen:privilege name="http://tizen.org/privilege/internet"/>
+  <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+  <tizen:privilege name="http://tizen.org/privilege/filesystem.read"/>
+  <tizen:setting background-support="disable" encryption="disable" hwkey-event="enable"
+                 install-location="auto" screen-orientation="landscape"/>
+  <access origin="*" subdomains="true"/>
+  <tizen:allow-navigation>*</tizen:allow-navigation>
+  <tizen:metadata key="http://samsung.com/tv/metadata/use.tv.input.device" value="true"/>
+  <tizen:metadata key="http://samsung.com/tv/metadata/prelaunch.support" value="false"/>
+</widget>
